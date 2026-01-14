@@ -433,3 +433,31 @@ func TestForkBucket(t *testing.T) {
 		})
 	}
 }
+
+// TestBucketLifecycle_integration tests the full bucket lifecycle with real Tigris operations.
+// This test requires TIGRIS_STORAGE_ACCESS_KEY_ID and TIGRIS_STORAGE_SECRET_ACCESS_KEY to be set.
+func TestBucketLifecycle_integration(t *testing.T) {
+	skipIfNoCreds(t)
+
+	ctx := context.Background()
+	os.Setenv("TIGRIS_STORAGE_BUCKET", "dummy-bucket")
+	defer os.Unsetenv("TIGRIS_STORAGE_BUCKET")
+
+	client, err := New(ctx)
+	if err != nil {
+		t.Fatalf("New() failed: %v", err)
+	}
+
+	// Use setupTestBucket to verify the helper works
+	bucket := setupTestBucket(t, ctx, client)
+	defer cleanupTestBucket(t, ctx, client, bucket)
+
+	// Verify bucket was created
+	info, err := client.GetBucketInfo(ctx, bucket)
+	if err != nil {
+		t.Errorf("GetBucketInfo() failed: %v", err)
+	}
+	if info.Name != bucket {
+		t.Errorf("GetBucketInfo() returned bucket name %s, want %s", info.Name, bucket)
+	}
+}
