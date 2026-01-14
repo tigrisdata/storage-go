@@ -97,7 +97,7 @@ func ExampleClient_ListBuckets() {
 
 	// Paginated listing
 	for {
-		list, err := client.ListBuckets(ctx,
+		list, err = client.ListBuckets(ctx,
 			simplestorage.WithListLimit(50),
 			simplestorage.WithListToken(list.NextToken),
 		)

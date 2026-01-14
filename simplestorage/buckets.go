@@ -124,23 +124,33 @@ func (c *Client) DeleteBucket(ctx context.Context, bucket string, opts ...Bucket
 
 // emptyBucket empties a bucket by deleting all objects in it.
 func (c *Client) emptyBucket(ctx context.Context, bucket string, o BucketOptions) error {
-	// List all objects
-	listResp, err := c.cli.ListObjectsV2(ctx, &s3.ListObjectsV2Input{
-		Bucket: aws.String(bucket),
-	}, o.S3Options...)
-	if err != nil {
-		return fmt.Errorf("can't list objects: %w", err)
-	}
-
-	// Delete each object
-	for _, obj := range listResp.Contents {
-		_, err := c.cli.DeleteObject(ctx, &s3.DeleteObjectInput{
-			Bucket: aws.String(bucket),
-			Key:    obj.Key,
+	// List and delete all objects, handling pagination
+	var continuationToken *string
+	for {
+		listResp, err := c.cli.ListObjectsV2(ctx, &s3.ListObjectsV2Input{
+			Bucket:            aws.String(bucket),
+			ContinuationToken: continuationToken,
 		}, o.S3Options...)
 		if err != nil {
-			return fmt.Errorf("can't delete object %s: %w", *obj.Key, err)
+			return fmt.Errorf("can't list objects: %w", err)
 		}
+
+		// Delete each object in this page
+		for _, obj := range listResp.Contents {
+			_, err := c.cli.DeleteObject(ctx, &s3.DeleteObjectInput{
+				Bucket: aws.String(bucket),
+				Key:    obj.Key,
+			}, o.S3Options...)
+			if err != nil {
+				return fmt.Errorf("can't delete object %s: %w", *obj.Key, err)
+			}
+		}
+
+		// Check if there are more objects
+		if listResp.NextContinuationToken == nil {
+			break
+		}
+		continuationToken = listResp.NextContinuationToken
 	}
 
 	return nil
@@ -148,7 +158,8 @@ func (c *Client) emptyBucket(ctx context.Context, bucket string, o BucketOptions
 
 // ListBuckets lists all buckets that the authenticated user has access to.
 //
-// Use WithListLimit() and WithListToken() for pagination.
+// Use WithListToken() for pagination. Note that WithListLimit() is not supported
+// by the underlying S3 ListBuckets API and is ignored.
 func (c *Client) ListBuckets(ctx context.Context, opts ...BucketOption) (*BucketList, error) {
 	o := new(BucketOptions).defaults()
 	for _, doer := range opts {
@@ -211,7 +222,9 @@ func (c *Client) GetBucketInfo(ctx context.Context, bucket string, opts ...Bucke
 		}, nil
 	}
 
-	// If Tigris headers failed, return a basic BucketInfo anyway
+	// If Tigris-specific metadata is not available, fall back to basic BucketInfo.
+	// This can happen when the bucket doesn't support Tigris features or when
+	// called against non-Tigris S3-compatible storage.
 	return &BucketInfo{
 		Name: bucket,
 	}, nil
@@ -276,8 +289,12 @@ func (c *Client) ListBucketSnapshots(ctx context.Context, bucket string, opts ..
 
 	// Parse snapshot info from response buckets
 	for _, b := range resp.Buckets {
-		// Extract snapshot info from bucket metadata
-		// Snapshot names are encoded in bucket names
+		// Extract snapshot info from bucket metadata.
+		// NOTE: The ListBuckets response does not expose a separate snapshot version field
+		// in the bucket structure, so Version is set to the bucket name. The actual
+		// snapshot version ID is returned in HTTP headers that are not directly
+		// accessible through the AWS SDK response. Use CreateBucketSnapshot for
+		// snapshot creation where the version is returned separately.
 		snap := SnapshotInfo{
 			Name:    lower(b.Name, ""),
 			Version: lower(b.Name, ""),
