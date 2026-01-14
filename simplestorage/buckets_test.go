@@ -37,11 +37,10 @@ func setupTestBucket(t *testing.T, ctx context.Context, client *Client) string {
 }
 
 // cleanupTestBucket deletes a bucket after testing.
-// It uses WithForceDelete() to ensure the bucket is deleted even if not empty.
 // Logs errors instead of failing, to avoid masking test failures.
 func cleanupTestBucket(t *testing.T, ctx context.Context, client *Client, bucket string) {
 	t.Helper()
-	err := client.DeleteBucket(ctx, bucket, WithForceDelete())
+	err := client.DeleteBucket(ctx, bucket)
 	if err != nil {
 		t.Logf("cleanupTestBucket: failed to delete bucket %s: %v", bucket, err)
 	}
@@ -265,15 +264,6 @@ func TestBucketOptions(t *testing.T) {
 			verify: func(t *testing.T, o *BucketOptions) {
 				if o.SnapshotVersion != "test-version" {
 					t.Errorf("WithSnapshotVersion() set version = %v, want %v", o.SnapshotVersion, "test-version")
-				}
-			},
-		},
-		{
-			name:   "WithForceDelete sets ForceDelete",
-			option: WithForceDelete(),
-			verify: func(t *testing.T, o *BucketOptions) {
-				if !o.ForceDelete {
-					t.Errorf("WithForceDelete() did not set ForceDelete")
 				}
 			},
 		},

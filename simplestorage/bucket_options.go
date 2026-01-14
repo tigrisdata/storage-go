@@ -16,9 +16,6 @@ type BucketOptions struct {
 	// SnapshotVersion specifies a snapshot version to target (for forking from specific snapshot).
 	SnapshotVersion string
 
-	// ForceDelete forces deletion of non-empty buckets by emptying them first.
-	ForceDelete bool
-
 	// Region sets static replication region for the bucket.
 	Region string
 
@@ -36,7 +33,6 @@ type BucketOptions struct {
 func (BucketOptions) defaults() BucketOptions {
 	return BucketOptions{
 		EnableSnapshot:    false,
-		ForceDelete:       false,
 		MaxKeys:           nil,
 		ContinuationToken: nil,
 		S3Options:         []func(*s3.Options){},
@@ -57,13 +53,6 @@ func WithSnapshotVersion(version string) BucketOption {
 	return func(o *BucketOptions) {
 		o.SnapshotVersion = version
 		o.S3Options = append(o.S3Options, tigrisheaders.WithSnapshotVersion(version))
-	}
-}
-
-// WithForceDelete forces deletion of a non-empty bucket by emptying it first.
-func WithForceDelete() BucketOption {
-	return func(o *BucketOptions) {
-		o.ForceDelete = true
 	}
 }
 

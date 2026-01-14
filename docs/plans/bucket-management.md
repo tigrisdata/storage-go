@@ -94,7 +94,6 @@ type BucketOption func(*BucketOptions)
 type BucketOptions struct {
     EnableSnapshot     bool                       // Enable snapshot capability on create
     SnapshotVersion    string                     // Specific snapshot version to target
-    ForceDelete        bool                       // Force delete non-empty bucket
     Region             string                     // Static replication region
     S3Options          []func(*s3.Options)        // S3 options passed through
     MaxKeys            *int32                     // Pagination limit
@@ -104,7 +103,6 @@ type BucketOptions struct {
 // Available options
 func WithEnableSnapshot() BucketOption
 func WithSnapshotVersion(version string) BucketOption
-func WithForceDelete() BucketOption
 func WithBucketRegion(region string) BucketOption
 func WithListLimit(limit int32) BucketOption
 func WithListToken(token string) BucketOption
@@ -169,15 +167,9 @@ if !list.Truncated {
 }
 ```
 
-### Force Delete Implementation
+### Bucket Deletion
 
-Non-empty buckets can be force deleted by emptying them first:
-
-```go
-err := client.DeleteBucket(ctx, "my-bucket",
-    simplestorage.WithForceDelete(),  // Empties bucket before deleting
-)
-```
+Buckets must be empty before they can be deleted. The `DeleteBucket` operation will fail if the bucket contains any objects. Users must manually empty the bucket using the object operations (`ListObjects` and `DeleteObject`) before calling `DeleteBucket`.
 
 ## Tigris-Specific Features
 

@@ -15,7 +15,7 @@ var (
 	// ErrBucketNotFound is returned when a bucket operation fails because the bucket doesn't exist.
 	ErrBucketNotFound = errors.New("simplestorage: bucket not found")
 
-	// ErrBucketNotEmpty is returned when trying to delete a non-empty bucket without ForceDelete.
+	// ErrBucketNotEmpty is returned when trying to delete a non-empty bucket.
 	ErrBucketNotEmpty = errors.New("simplestorage: bucket not empty")
 
 	// ErrSnapshotRequired is returned when a snapshot version is required but not provided.
@@ -93,7 +93,8 @@ func (c *Client) CreateBucket(ctx context.Context, bucket string, opts ...Bucket
 
 // DeleteBucket deletes the bucket with the given name.
 //
-// If the bucket is not empty, the operation will fail unless WithForceDelete() is used.
+// If the bucket is not empty, the operation will fail.
+// The bucket must be manually emptied before deletion.
 func (c *Client) DeleteBucket(ctx context.Context, bucket string, opts ...BucketOption) error {
 	if bucket == "" {
 		return errors.New("simplestorage: bucket name required for bucket management operations")
@@ -104,53 +105,12 @@ func (c *Client) DeleteBucket(ctx context.Context, bucket string, opts ...Bucket
 		doer(&o)
 	}
 
-	// If force delete, empty the bucket first
-	if o.ForceDelete {
-		if err := c.emptyBucket(ctx, bucket, o); err != nil {
-			return fmt.Errorf("simplestorage: can't empty bucket %s: %w", bucket, err)
-		}
-	}
-
 	_, err := c.cli.DeleteBucket(ctx, &s3.DeleteBucketInput{
 		Bucket: aws.String(bucket),
 	}, o.S3Options...)
 
 	if err != nil {
 		return fmt.Errorf("simplestorage: can't delete bucket %s: %w", bucket, err)
-	}
-
-	return nil
-}
-
-// emptyBucket empties a bucket by deleting all objects in it.
-func (c *Client) emptyBucket(ctx context.Context, bucket string, o BucketOptions) error {
-	// List and delete all objects, handling pagination
-	var continuationToken *string
-	for {
-		listResp, err := c.cli.ListObjectsV2(ctx, &s3.ListObjectsV2Input{
-			Bucket:            aws.String(bucket),
-			ContinuationToken: continuationToken,
-		}, o.S3Options...)
-		if err != nil {
-			return fmt.Errorf("can't list objects: %w", err)
-		}
-
-		// Delete each object in this page
-		for _, obj := range listResp.Contents {
-			_, err := c.cli.DeleteObject(ctx, &s3.DeleteObjectInput{
-				Bucket: aws.String(bucket),
-				Key:    obj.Key,
-			}, o.S3Options...)
-			if err != nil {
-				return fmt.Errorf("can't delete object %s: %w", *obj.Key, err)
-			}
-		}
-
-		// Check if there are more objects
-		if listResp.NextContinuationToken == nil {
-			break
-		}
-		continuationToken = listResp.NextContinuationToken
 	}
 
 	return nil

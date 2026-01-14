@@ -65,14 +65,6 @@ func ExampleClient_DeleteBucket() {
 	if err != nil {
 		log.Fatal(err)
 	}
-
-	// Force delete a non-empty bucket
-	err = client.DeleteBucket(ctx, "my-non-empty-bucket",
-		simplestorage.WithForceDelete(),
-	)
-	if err != nil {
-		log.Fatal(err)
-	}
 }
 
 func ExampleClient_ListBuckets() {
@@ -246,12 +238,13 @@ func Example_bucketManagementWorkflow() {
 	fmt.Printf("Forked bucket info: %+v\n", info)
 
 	// Clean up - delete both buckets
-	err = client.DeleteBucket(ctx, "my-forked-bucket", simplestorage.WithForceDelete())
+	// Note: Buckets must be empty before they can be deleted
+	err = client.DeleteBucket(ctx, "my-forked-bucket")
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	err = client.DeleteBucket(ctx, "my-new-bucket", simplestorage.WithForceDelete())
+	err = client.DeleteBucket(ctx, "my-new-bucket")
 	if err != nil {
 		log.Fatal(err)
 	}
