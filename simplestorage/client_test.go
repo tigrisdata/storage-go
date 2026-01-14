@@ -9,11 +9,11 @@ import (
 
 func TestNew(t *testing.T) {
 	tests := []struct {
-		name        string
-		setupEnv    func() func()
-		options     []Option
-		wantErr     error
-		errCheck    func(error) bool
+		name     string
+		setupEnv func() func()
+		options  []Option
+		wantErr  error
+		errCheck func(error) bool
 	}{
 		{
 			name: "bucket from env var",

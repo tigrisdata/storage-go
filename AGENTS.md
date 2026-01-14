@@ -29,7 +29,7 @@ This is a Go SDK library for Tigris Data storage, not a binary application. Sour
 
 ### Code Formatting & Style
 
-- **Go** – use `go fmt`/`goimports`; tabs for indentation, `camelCase` for variables, `PascalCase` for exported identifiers
+- **Go** – use `go fmt`/`go tool goimports`; tabs for indentation, `camelCase` for variables, `PascalCase` for exported identifiers
 - **JavaScript/JSON/YAML** – formatted with Prettier (2-space tabs, trailing commas, double quotes)
 - Files are `snake_case`; packages use lower-case module names
 - Run `npm run format` before committing

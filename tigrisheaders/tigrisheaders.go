@@ -139,6 +139,26 @@ func WithSnapshotVersion(snapshotVersion string) func(*s3.Options) {
 	return WithHeader("X-Tigris-Snapshot-Version", snapshotVersion)
 }
 
+// WithForkSourceBucket sets the source bucket when creating a bucket fork.
+//
+// See the Tigris documentation[1] for more information.
+//
+// [1]: https://www.tigrisdata.com/docs/buckets/snapshots-and-forks/#forking-a-bucket
+func WithForkSourceBucket(sourceBucket string) func(*s3.Options) {
+	return WithHeader("X-Tigris-Fork-Source-Bucket", sourceBucket)
+}
+
+// WithListSnapshots lists snapshots for the given bucket.
+//
+// This is different from WithTakeSnapshot which creates a snapshot.
+//
+// See the Tigris documentation[1] for more information.
+//
+// [1]: https://www.tigrisdata.com/docs/buckets/snapshots-and-forks/#listing-snapshots
+func WithListSnapshots(bucketName string) func(*s3.Options) {
+	return WithHeader("X-Tigris-Snapshot", bucketName)
+}
+
 // WithRename tells Tigris to do an in-place rename of objects instead of copying them when using a CopyObject call.
 //
 // See the Tigris documentation[1] for more information.

@@ -43,9 +43,9 @@ func TestHeaderFunctionsAreValid(t *testing.T) {
 
 func TestWithStaticReplicationRegions_formatting(t *testing.T) {
 	tests := []struct {
-		name     string
-		regions  []Region
-		want     string
+		name    string
+		regions []Region
+		want    string
 	}{
 		{
 			name:    "single region",
