@@ -16,6 +16,7 @@
   "main": "index.js",
   "scripts": {
     "test": "go test ./...",
+    "format": "go tool goimports -w . && prettier -w .",
     "prepare": "husky"
   },
   "devDependencies": {
