@@ -79,6 +79,7 @@ Assisted-by: GLM 4.7 via Claude Code
 When asked about various services or tools, use these resources to help you:
 
 - **Tigris** or **Tigris Data**: https://www.tigrisdata.com/docs/llms.txt
+- **Conductor**: https://docs.conductor.build/llms.txt
 
 ## Pull Request Requirements
 
