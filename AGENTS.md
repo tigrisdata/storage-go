@@ -41,6 +41,19 @@ This is a Go SDK library for Tigris Data storage, not a binary application. Sour
 - Run the full suite with `npm test` or `go test ./...`
 - Package examples are in `example_test.go` for Godoc
 
+#### Example Code Error Handling
+
+When writing example code in `*_example_test.go` files, follow this pattern for error handling:
+
+```go
+result, err := client.SomeOperation(ctx)
+if err != nil {
+    log.Fatal(err) // handle the error here
+}
+```
+
+The `// handle the error here` comment indicates to users that they should replace `log.Fatal(err)` with appropriate error handling for their use case (logging, retry, cleanup, etc.).
+
 ## Code Quality & Security
 
 ### Commit Guidelines

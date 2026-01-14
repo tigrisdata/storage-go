@@ -23,7 +23,7 @@ func ExampleClient_CreateBucket() {
 	// Create a standard bucket
 	info, err := client.CreateBucket(ctx, "my-new-bucket")
 	if err != nil {
-		log.Fatal(err)
+		log.Fatal(err) // handle the error here
 	}
 
 	fmt.Printf("Created bucket: %s\n", info.Name)
@@ -44,7 +44,7 @@ func ExampleClient_CreateBucket_snapshot() {
 		simplestorage.WithEnableSnapshot(),
 	)
 	if err != nil {
-		log.Fatal(err)
+		log.Fatal(err) // handle the error here
 	}
 
 	fmt.Printf("Created bucket with snapshots: %s\n", info.Name)
@@ -63,7 +63,7 @@ func ExampleClient_DeleteBucket() {
 	// Delete a bucket (fails if not empty)
 	err = client.DeleteBucket(ctx, "my-bucket")
 	if err != nil {
-		log.Fatal(err)
+		log.Fatal(err) // handle the error here
 	}
 }
 
@@ -80,7 +80,7 @@ func ExampleClient_ListBuckets() {
 	// List all buckets
 	list, err := client.ListBuckets(ctx)
 	if err != nil {
-		log.Fatal(err)
+		log.Fatal(err) // handle the error here
 	}
 
 	for _, bucket := range list.Buckets {
@@ -94,7 +94,7 @@ func ExampleClient_ListBuckets() {
 			simplestorage.WithListToken(list.NextToken),
 		)
 		if err != nil {
-			log.Fatal(err)
+			log.Fatal(err) // handle the error here
 		}
 
 		// Process buckets...
@@ -118,7 +118,7 @@ func ExampleClient_GetBucketInfo() {
 	// Get bucket information
 	info, err := client.GetBucketInfo(ctx, "my-bucket")
 	if err != nil {
-		log.Fatal(err)
+		log.Fatal(err) // handle the error here
 	}
 
 	fmt.Printf("Snapshots enabled: %v\n", info.SnapshotsEnabled)
@@ -140,7 +140,7 @@ func ExampleClient_CreateBucketSnapshot() {
 	// Create a named snapshot
 	snapshot, err := client.CreateBucketSnapshot(ctx, "my-bucket", "Backup before migration")
 	if err != nil {
-		log.Fatal(err)
+		log.Fatal(err) // handle the error here
 	}
 
 	fmt.Printf("Created snapshot: %s (version: %s)\n", snapshot.Name, snapshot.Version)
@@ -159,7 +159,7 @@ func ExampleClient_ListBucketSnapshots() {
 	// List all snapshots for a bucket
 	snapshots, err := client.ListBucketSnapshots(ctx, "my-bucket")
 	if err != nil {
-		log.Fatal(err)
+		log.Fatal(err) // handle the error here
 	}
 
 	for _, snap := range snapshots.Snapshots {
@@ -180,7 +180,7 @@ func ExampleClient_ForkBucket() {
 	// Fork a bucket
 	forkInfo, err := client.ForkBucket(ctx, "original-bucket", "forked-bucket")
 	if err != nil {
-		log.Fatal(err)
+		log.Fatal(err) // handle the error here
 	}
 
 	fmt.Printf("Forked bucket: %s (from: %s)\n", forkInfo.Name, forkInfo.SourceBucket)
@@ -190,7 +190,7 @@ func ExampleClient_ForkBucket() {
 		simplestorage.WithSnapshotVersion("snapshot-version-id"),
 	)
 	if err != nil {
-		log.Fatal(err)
+		log.Fatal(err) // handle the error here
 	}
 
 	fmt.Printf("Forked from snapshot: %s\n", forkInfo.SourceSnapshot)
@@ -211,13 +211,13 @@ func Example_bucketManagementWorkflow() {
 		simplestorage.WithEnableSnapshot(),
 	)
 	if err != nil {
-		log.Fatal(err)
+		log.Fatal(err) // handle the error here
 	}
 
 	// Create a snapshot
 	snapshot, err := client.CreateBucketSnapshot(ctx, "my-new-bucket", "Initial state")
 	if err != nil {
-		log.Fatal(err)
+		log.Fatal(err) // handle the error here
 	}
 
 	// Fork from the snapshot
@@ -225,14 +225,14 @@ func Example_bucketManagementWorkflow() {
 		simplestorage.WithSnapshotVersion(snapshot.Version),
 	)
 	if err != nil {
-		log.Fatal(err)
+		log.Fatal(err) // handle the error here
 	}
 	_ = forkInfo // Use the fork info
 
 	// Get bucket info
 	info, err = client.GetBucketInfo(ctx, "my-forked-bucket")
 	if err != nil {
-		log.Fatal(err)
+		log.Fatal(err) // handle the error here
 	}
 
 	fmt.Printf("Forked bucket info: %+v\n", info)
@@ -241,12 +241,12 @@ func Example_bucketManagementWorkflow() {
 	// Note: Buckets must be empty before they can be deleted
 	err = client.DeleteBucket(ctx, "my-forked-bucket")
 	if err != nil {
-		log.Fatal(err)
+		log.Fatal(err) // handle the error here
 	}
 
 	err = client.DeleteBucket(ctx, "my-new-bucket")
 	if err != nil {
-		log.Fatal(err)
+		log.Fatal(err) // handle the error here
 	}
 }
 
@@ -265,7 +265,7 @@ func ExampleWithBucketRegion() {
 		simplestorage.WithBucketRegion("fra"), // Frankfurt, Germany
 	)
 	if err != nil {
-		log.Fatal(err)
+		log.Fatal(err) // handle the error here
 	}
 
 	fmt.Printf("Created bucket: %s\n", info.Name)
