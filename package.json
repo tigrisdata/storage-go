@@ -15,6 +15,18 @@
   "type": "module",
   "main": "index.js",
   "scripts": {
-    "test": "go test ./..."
+    "test": "go test ./...",
+    "prepare": "husky"
+  },
+  "devDependencies": {
+    "husky": "^9.1.7",
+    "prettier": "^3.7.4"
+  },
+  "prettier": {
+    "singleQuote": false,
+    "tabWidth": 2,
+    "semi": true,
+    "trailingComma": "all",
+    "printWidth": 80
   }
 }
