@@ -83,6 +83,7 @@ When asked about various services or tools, use these resources to help you:
 
 ## Pull Request Requirements
 
+- **ALL pull requests MUST use the template in `.github/pull_request_template.md`**
 - Include a clear description of changes
 - Reference any related issues
 - Pass CI (`npm test`)
