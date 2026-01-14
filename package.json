@@ -1,0 +1,20 @@
+{
+  "name": "@tigrisdata/storage-go",
+  "version": "0.1.0",
+  "description": "The Tigris Go SDK!",
+  "homepage": "https://github.com/tigrisdata/storage-go#readme",
+  "bugs": {
+    "url": "https://github.com/tigrisdata/storage-go/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/tigrisdata/storage-go.git"
+  },
+  "license": "MIT",
+  "author": "Tigris Data",
+  "type": "module",
+  "main": "index.js",
+  "scripts": {
+    "test": "go test ./..."
+  }
+}
