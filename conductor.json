@@ -1,6 +1,6 @@
 {
-    "scripts": {
-        "setup": "npm ci && go mod download",
-        "run": "go test ./..."
-    }
+  "scripts": {
+    "setup": "npm ci && go mod download",
+    "run": "go test ./..."
+  }
 }
