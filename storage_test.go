@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/aws/aws-sdk-go-v2/service/s3"
+	_ "github.com/joho/godotenv/autoload"
 )
 
 func TestOptions_defaults(t *testing.T) {

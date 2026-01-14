@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 
+	_ "github.com/joho/godotenv/autoload"
 	simplestorage "github.com/tigrisdata/storage-go/simplestorage"
 )
 

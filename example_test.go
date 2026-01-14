@@ -6,6 +6,7 @@ import (
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
+	_ "github.com/joho/godotenv/autoload"
 	storage "github.com/tigrisdata/storage-go"
 )
 

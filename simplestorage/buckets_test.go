@@ -8,6 +8,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	_ "github.com/joho/godotenv/autoload"
 )
 
 // skipIfNoCreds skips the test if Tigris credentials are not set.
