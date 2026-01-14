@@ -17,6 +17,9 @@ type BucketOptions struct {
 	SnapshotVersion string
 
 	// Region sets static replication region for the bucket.
+	// This field is stored for visibility but the actual behavior is configured
+	// via S3Options (see WithBucketRegion). Keeping the field enables debugging
+	// and potential future use in bucket info responses.
 	Region string
 
 	// MaxKeys sets the maximum number of results to return in ListBuckets.

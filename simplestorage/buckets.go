@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -93,7 +94,7 @@ func (c *Client) CreateBucket(ctx context.Context, bucket string, opts ...Bucket
 
 // DeleteBucket deletes the bucket with the given name.
 //
-// If the bucket is not empty, the operation will fail.
+// If the bucket is not empty, returns ErrBucketNotEmpty.
 // The bucket must be manually emptied before deletion.
 func (c *Client) DeleteBucket(ctx context.Context, bucket string, opts ...BucketOption) error {
 	if bucket == "" {
@@ -110,10 +111,27 @@ func (c *Client) DeleteBucket(ctx context.Context, bucket string, opts ...Bucket
 	}, o.S3Options...)
 
 	if err != nil {
+		// Check if the error is because the bucket is not empty
+		// The S3 API error message typically contains "BucketNotEmpty"
+		if containsBucketNotEmptyError(err) {
+			return fmt.Errorf("simplestorage: can't delete bucket %s: %w", bucket, ErrBucketNotEmpty)
+		}
 		return fmt.Errorf("simplestorage: can't delete bucket %s: %w", bucket, err)
 	}
 
 	return nil
+}
+
+// containsBucketNotEmptyError checks if an error indicates a bucket is not empty.
+func containsBucketNotEmptyError(err error) bool {
+	if err == nil {
+		return false
+	}
+	// Check error message for BucketNotEmpty indicator
+	errMsg := err.Error()
+	return strings.Contains(errMsg, "BucketNotEmpty") ||
+		strings.Contains(errMsg, "bucket not empty") ||
+		strings.Contains(errMsg, "NotEmpty")
 }
 
 // ListBuckets lists all buckets that the authenticated user has access to.
