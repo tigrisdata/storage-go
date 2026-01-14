@@ -54,6 +54,19 @@ if err != nil {
 
 The `// handle the error here` comment indicates to users that they should replace `log.Fatal(err)` with appropriate error handling for their use case (logging, retry, cleanup, etc.).
 
+#### Test Imports
+
+When writing test code that may use environment variables for configuration, import the godotenv autoload package:
+
+```go
+import (
+    _ "github.com/joho/godotenv/autoload"
+    // ... other imports
+)
+```
+
+This automatically loads environment variables from a `.env` file in the project root, which is useful for integration tests that require credentials or other configuration.
+
 ## Code Quality & Security
 
 ### Commit Guidelines
