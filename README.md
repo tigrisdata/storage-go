@@ -1,5 +1,7 @@
 # Tigris Storage SDK for Go
 
+> **Looking for TypeScript?** The Tigris Storage TypeScript SDK is available at [github.com/tigrisdata/storage](https://github.com/tigrisdata/storage) or on NPM as [`@tigrisdata/storage`](https://www.npmjs.com/package/@tigrisdata/storage).
+
 Welcome to the Tigris Storage SDK for Go! This package contains high-level wrappers and helpers to help you take advantage of all of Tigris' features.
 
 ## Overview
