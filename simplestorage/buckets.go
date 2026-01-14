@@ -13,6 +13,9 @@ import (
 )
 
 var (
+	// ErrBucketNameRequired is returned when a bucket name is required but not provided.
+	ErrBucketNameRequired = errors.New("simplestorage: bucket name required for bucket management operations")
+
 	// ErrBucketNotFound is returned when a bucket operation fails because the bucket doesn't exist.
 	ErrBucketNotFound = errors.New("simplestorage: bucket not found")
 
@@ -61,7 +64,7 @@ type SnapshotList struct {
 // For Tigris-specific features like snapshots, use options like WithEnableSnapshot().
 func (c *Client) CreateBucket(ctx context.Context, bucket string, opts ...BucketOption) (*BucketInfo, error) {
 	if bucket == "" {
-		return nil, errors.New("simplestorage: bucket name required for bucket management operations")
+		return nil, ErrBucketNameRequired
 	}
 
 	o := new(BucketOptions).defaults()
@@ -98,7 +101,7 @@ func (c *Client) CreateBucket(ctx context.Context, bucket string, opts ...Bucket
 // The bucket must be manually emptied before deletion.
 func (c *Client) DeleteBucket(ctx context.Context, bucket string, opts ...BucketOption) error {
 	if bucket == "" {
-		return errors.New("simplestorage: bucket name required for bucket management operations")
+		return ErrBucketNameRequired
 	}
 
 	o := new(BucketOptions).defaults()
@@ -177,7 +180,7 @@ func (c *Client) ListBuckets(ctx context.Context, opts ...BucketOption) (*Bucket
 // and whether the bucket is a fork of another bucket.
 func (c *Client) GetBucketInfo(ctx context.Context, bucket string, opts ...BucketOption) (*BucketInfo, error) {
 	if bucket == "" {
-		return nil, errors.New("simplestorage: bucket name required for bucket management operations")
+		return nil, ErrBucketNameRequired
 	}
 
 	o := new(BucketOptions).defaults()
@@ -213,7 +216,7 @@ func (c *Client) GetBucketInfo(ctx context.Context, bucket string, opts ...Bucke
 // The bucket must have snapshots enabled (created with WithEnableSnapshot()).
 func (c *Client) CreateBucketSnapshot(ctx context.Context, bucket, description string, opts ...BucketOption) (*SnapshotInfo, error) {
 	if bucket == "" {
-		return nil, errors.New("simplestorage: bucket name required for bucket management operations")
+		return nil, ErrBucketNameRequired
 	}
 
 	o := new(BucketOptions).defaults()
@@ -243,7 +246,7 @@ func (c *Client) CreateBucketSnapshot(ctx context.Context, bucket, description s
 // ListBucketSnapshots lists all snapshots for the given bucket.
 func (c *Client) ListBucketSnapshots(ctx context.Context, bucket string, opts ...BucketOption) (*SnapshotList, error) {
 	if bucket == "" {
-		return nil, errors.New("simplestorage: bucket name required for bucket management operations")
+		return nil, ErrBucketNameRequired
 	}
 
 	o := new(BucketOptions).defaults()
@@ -290,10 +293,10 @@ func (c *Client) ListBucketSnapshots(ctx context.Context, bucket string, opts ..
 // Use WithSnapshotVersion() to fork from a specific snapshot version.
 func (c *Client) ForkBucket(ctx context.Context, source, target string, opts ...BucketOption) (*BucketInfo, error) {
 	if source == "" {
-		return nil, errors.New("simplestorage: source bucket name required for bucket management operations")
+		return nil, fmt.Errorf("simplestorage: source bucket name required: %w", ErrBucketNameRequired)
 	}
 	if target == "" {
-		return nil, errors.New("simplestorage: target bucket name required for bucket management operations")
+		return nil, fmt.Errorf("simplestorage: target bucket name required: %w", ErrBucketNameRequired)
 	}
 
 	o := new(BucketOptions).defaults()

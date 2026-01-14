@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"strings"
 	"testing"
 	"time"
 
@@ -59,7 +58,7 @@ func TestCreateBucket(t *testing.T) {
 		{
 			name:          "empty bucket name returns error",
 			bucket:        "",
-			wantErr:       errors.New("simplestorage: bucket name required for bucket management operations"),
+			wantErr:       ErrBucketNameRequired,
 			skipIfNoCreds: false,
 		},
 	}
@@ -98,7 +97,7 @@ func TestCreateBucket(t *testing.T) {
 					if !tt.errCheck(err) {
 						t.Errorf("CreateBucket() error = %v, want error matching %v", err, tt.wantErr)
 					}
-				} else if !strings.Contains(err.Error(), tt.wantErr.Error()) {
+				} else if !errors.Is(err, tt.wantErr) {
 					t.Errorf("CreateBucket() error = %v, want %v", err, tt.wantErr)
 				}
 			} else if err != nil {
@@ -119,7 +118,7 @@ func TestDeleteBucket(t *testing.T) {
 		{
 			name:     "empty bucket name returns error",
 			bucket:   "",
-			wantErr:  errors.New("simplestorage: bucket name required for bucket management operations"),
+			wantErr:  ErrBucketNameRequired,
 			setupEnv: func() func() { return func() {} },
 		},
 	}
@@ -150,7 +149,7 @@ func TestDeleteBucket(t *testing.T) {
 					t.Errorf("DeleteBucket() expected error, got nil")
 					return
 				}
-				if !strings.Contains(err.Error(), tt.wantErr.Error()) {
+				if !errors.Is(err, tt.wantErr) {
 					t.Errorf("DeleteBucket() error = %v, want %v", err, tt.wantErr)
 				}
 			} else if err != nil {
