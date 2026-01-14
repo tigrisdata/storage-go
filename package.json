@@ -19,8 +19,31 @@
     "prepare": "husky"
   },
   "devDependencies": {
+    "@commitlint/cli": "^20.3.1",
+    "@commitlint/config-conventional": "^20.3.1",
     "husky": "^9.1.7",
     "prettier": "^3.7.4"
+  },
+  "commitlint": {
+    "extends": [
+      "@commitlint/config-conventional"
+    ],
+    "rules": {
+      "body-max-line-length": [
+        2,
+        "always",
+        99999
+      ],
+      "footer-max-line-length": [
+        2,
+        "always",
+        99999
+      ],
+      "signed-off-by": [
+        2,
+        "always"
+      ]
+    }
   },
   "prettier": {
     "singleQuote": false,
