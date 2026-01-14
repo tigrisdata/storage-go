@@ -315,7 +315,7 @@ for name, tt := range tests {
 
 ### Parallel Testing
 
-To run test cases in parallel, add `t.Parallel()` calls. For Go 1.22+, the loop variable is automatically captured per iteration:
+To run test cases in parallel, add `t.Parallel()` calls. The loop variable is automatically captured per iteration:
 
 ```go
 func TestFunction(t *testing.T) {
@@ -332,18 +332,6 @@ func TestFunction(t *testing.T) {
             // test implementation
         })
     }
-}
-```
-
-**Note:** For Go versions prior to 1.22, you must re-declare the loop variable to avoid closure issues:
-
-```go
-for _, tt := range tests {
-    tt := tt // capture loop variable
-    t.Run(tt.name, func(t *testing.T) {
-        t.Parallel()
-        // ...
-    })
 }
 ```
 
