@@ -29,7 +29,7 @@ This is a Go SDK library for Tigris Data storage, not a binary application. Sour
 
 ### Code Formatting & Style
 
-- **Go** – use `go fmt`/`goimports`; tabs for indentation, `camelCase` for variables, `PascalCase` for exported identifiers
+- **Go** – use `go fmt`/`go tool goimports`; tabs for indentation, `camelCase` for variables, `PascalCase` for exported identifiers
 - **JavaScript/JSON/YAML** – formatted with Prettier (2-space tabs, trailing commas, double quotes)
 - Files are `snake_case`; packages use lower-case module names
 - Run `npm run format` before committing
@@ -40,6 +40,32 @@ This is a Go SDK library for Tigris Data storage, not a binary application. Sour
 - Keep test files next to the code they cover
 - Run the full suite with `npm test` or `go test ./...`
 - Package examples are in `example_test.go` for Godoc
+
+#### Example Code Error Handling
+
+When writing example code in `*_example_test.go` files, follow this pattern for error handling:
+
+```go
+result, err := client.SomeOperation(ctx)
+if err != nil {
+    log.Fatal(err) // handle the error here
+}
+```
+
+The `// handle the error here` comment indicates to users that they should replace `log.Fatal(err)` with appropriate error handling for their use case (logging, retry, cleanup, etc.).
+
+#### Test Imports
+
+When writing test code that may use environment variables for configuration, import the godotenv autoload package:
+
+```go
+import (
+    _ "github.com/joho/godotenv/autoload"
+    // ... other imports
+)
+```
+
+This automatically loads environment variables from a `.env` file in the project root, which is useful for integration tests that require credentials or other configuration.
 
 ## Code Quality & Security
 

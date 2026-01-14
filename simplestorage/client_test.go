@@ -5,6 +5,8 @@ import (
 	"errors"
 	"os"
 	"testing"
+
+	_ "github.com/joho/godotenv/autoload"
 )
 
 func TestNew(t *testing.T) {
