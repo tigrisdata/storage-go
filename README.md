@@ -6,10 +6,7 @@ Welcome to the Tigris Storage SDK for Go! This package contains high-level wrapp
 
 [Tigris](https://www.tigrisdata.com/) is a cloud storage service that provides a simple, scalable, and secure object storage solution. It is based on the S3 API, but has additional features that need these helpers.
 
-This SDK provides two main packages:
-
-- **`storage`** - The main package containing the Tigris client with S3-compatible methods plus Tigris-specific features like bucket forking, snapshots, and object renaming.
-- **`tigrisheaders`** - Lower-level helpers for setting Tigris-specific HTTP headers on S3 API calls.
+This SDK provides the main **`storage`** package containing the Tigris client with S3-compatible methods plus Tigris-specific features like bucket forking, snapshots, and object renaming.
 
 ## Installation
 
@@ -126,107 +123,6 @@ _, err := client.RenameObject(ctx, &s3.CopyObjectInput{
     CopySource: aws.String("my-bucket/old-name.txt"),
     Key:        aws.String("new-name.txt"),
 })
-```
-
-## Using the tigrisheaders Package
-
-The `tigrisheaders` package provides lower-level helpers for setting Tigris-specific HTTP headers. These can be used directly with S3 client operations.
-
-### Static Replication Regions
-
-Control which regions your objects are replicated to:
-
-```go
-import "github.com/tigrisdata/storage-go/tigrisheaders"
-
-// Replicate to specific regions
-_, err := client.PutObject(ctx, &s3.PutObjectInput{
-    Bucket: aws.String("my-bucket"),
-    Key:    aws.String("file.txt"),
-    Body:   bytes.NewReader(data),
-}, tigrisheaders.WithStaticReplicationRegions([]tigrisheaders.Region{
-    tigrisheaders.FRA, // Frankfurt
-    tigrisheaders.SJC, // San Jose
-}))
-```
-
-Available regions:
-
-- `FRA` - Frankfurt, Germany
-- `GRU` - São Paulo, Brazil
-- `HKG` - Hong Kong, China
-- `IAD` - Ashburn, Virginia, USA
-- `JNB` - Johannesburg, South Africa
-- `LHR` - London, UK
-- `MAD` - Madrid, Spain
-- `NRT` - Tokyo (Narita), Japan
-- `ORD` - Chicago, Illinois, USA
-- `SIN` - Singapore
-- `SJC` - San Jose, California, USA
-- `SYD` - Sydney, Australia
-- `Europe` - European datacenters
-- `USA` - American datacenters
-
-### Query Metadata
-
-Filter objects in a ListObjectsV2 request with a SQL-like WHERE clause:
-
-```go
-_, err := client.ListObjectsV2(ctx, &s3.ListObjectsV2Input{
-    Bucket: aws.String("my-bucket"),
-}, tigrisheaders.WithQuery("metadata.user_id = '123'"))
-```
-
-### Conditional Operations
-
-Perform operations based on object state:
-
-```go
-// Create object only if it doesn't exist
-_, err := client.PutObject(ctx, input,
-    tigrisheaders.WithCreateObjectIfNotExists())
-
-// Only proceed if ETag matches
-_, err := client.PutObject(ctx, input,
-    tigrisheaders.WithIfEtagMatches("\"abc123\""))
-
-// Only proceed if modified since date
-_, err := client.GetObject(ctx, input,
-    tigrisheaders.WithModifiedSince(time.Now().Add(-24 * time.Hour)))
-
-// Only proceed if unmodified since date
-_, err := client.GetObject(ctx, input,
-    tigrisheaders.WithUnmodifiedSince(time.Now().Add(-24 * time.Hour)))
-
-// Compare-and-swap (skip cache, read from designated region)
-_, err := client.GetObject(ctx, input,
-    tigrisheaders.WithCompareAndSwap())
-```
-
-### Snapshot Operations
-
-Work with specific snapshot versions:
-
-```go
-// List objects from a specific snapshot
-_, err := client.ListObjectsV2(ctx, &s3.ListObjectsV2Input{
-    Bucket: aws.String("my-bucket"),
-}, tigrisheaders.WithSnapshotVersion("snapshot-id"))
-
-// Get object from a specific snapshot
-_, err := client.GetObject(ctx, &s3.GetObjectInput{
-    Bucket: aws.String("my-bucket"),
-    Key:    aws.String("file.txt"),
-}, tigrisheaders.WithSnapshotVersion("snapshot-id"))
-```
-
-### Custom Headers
-
-Set arbitrary HTTP headers on requests:
-
-```go
-_, err := client.PutObject(ctx, input,
-    tigrisheaders.WithHeader("X-Custom-Header", "value"))
 ```
 
 ## Documentation
