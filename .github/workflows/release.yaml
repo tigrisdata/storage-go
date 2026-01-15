@@ -25,7 +25,7 @@ jobs:
 
       - name: release
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.WRITE_GH_TOKEN }}
         run: |
           npm ci
           npx semantic-release --debug
