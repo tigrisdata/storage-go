@@ -57,6 +57,27 @@ func WithMaxKeys(maxKeys int32) ClientOption {
 	}
 }
 
+// WithDelimiter sets a delimiter for grouping keys in List calls.
+func WithDelimiter(delimiter string) ClientOption {
+	return func(co *ClientOptions) {
+		co.Delimiter = aws.String(delimiter)
+	}
+}
+
+// WithPrefix sets the prefix to filter keys in List calls.
+func WithPrefix(prefix string) ClientOption {
+	return func(co *ClientOptions) {
+		co.Prefix = aws.String(prefix)
+	}
+}
+
+// WithPaginationToken sets the pagination token to continue listing objects.
+func WithPaginationToken(token string) ClientOption {
+	return func(co *ClientOptions) {
+		co.PaginationToken = aws.String(token)
+	}
+}
+
 // ClientOptions is the collection of options that are set for individual Tigris
 // calls.
 type ClientOptions struct {
@@ -64,8 +85,11 @@ type ClientOptions struct {
 	S3Options  []func(*s3.Options)
 
 	// List options
-	StartAfter *string
-	MaxKeys    *int32
+	StartAfter      *string
+	MaxKeys         *int32
+	Delimiter       *string
+	Prefix          *string
+	PaginationToken *string
 }
 
 // defaults populates client options from the global Options.
@@ -130,14 +154,23 @@ func New(ctx context.Context, options ...Option) (*Client, error) {
 // Some calls may not populate all fields. Ensure that the values are valid before
 // consuming them.
 type Object struct {
-	Bucket       string        // Bucket the object is in
-	Key          string        // Key for the object
-	ContentType  string        // MIME type for the object or application/octet-stream
-	Etag         string        // Entity tag for the object (usually a checksum)
-	Version      string        // Version tag for the object
-	Size         int64         // Size of the object in bytes or 0 if unknown
-	LastModified time.Time     // Creation date of the object
-	Body         io.ReadCloser // Body of the object so it can be read, don't forget to close it.
+	Bucket             string        // Bucket the object is in
+	Key                string        // Key for the object
+	ContentType        string        // MIME type for the object or application/octet-stream
+	ContentDisposition string        // Content disposition of the object (inline or attachment)
+	Etag               string        // Entity tag for the object (usually a checksum)
+	Version            string        // Version tag for the object
+	Size               int64         // Size of the object in bytes or 0 if unknown
+	LastModified       time.Time     // Creation date of the object
+	URL                string        // Public or presigned URL for the object
+	Body               io.ReadCloser // Body of the object so it can be read, don't forget to close it.
+}
+
+// ListResult contains the result of a List operation, including pagination information.
+type ListResult struct {
+	Items     []Object // List of objects
+	NextToken string   // Pagination token for the next page
+	HasMore   bool     // Whether there are more objects to list
 }
 
 // Get fetches the contents of an object and its metadata from Tigris.
@@ -226,8 +259,12 @@ func (c *Client) Delete(ctx context.Context, key string, opts ...ClientOption) e
 	return nil
 }
 
-// List returns a list of objects matching a key prefix.
-func (c *Client) List(ctx context.Context, prefix string, opts ...ClientOption) ([]Object, error) {
+// List returns a list of objects matching the given criteria.
+//
+// The returned ListResult contains pagination information; use NextToken with
+// WithPaginationToken() to fetch the next page. HasMore indicates whether
+// additional objects are available.
+func (c *Client) List(ctx context.Context, opts ...ClientOption) (*ListResult, error) {
 	o := new(ClientOptions).defaults(c.options)
 
 	for _, doer := range opts {
@@ -237,25 +274,33 @@ func (c *Client) List(ctx context.Context, prefix string, opts ...ClientOption) 
 	resp, err := c.cli.ListObjectsV2(
 		ctx,
 		&s3.ListObjectsV2Input{
-			Bucket: aws.String(o.BucketName),
-			Prefix: aws.String(prefix),
-
-			MaxKeys:    o.MaxKeys,
-			StartAfter: o.StartAfter,
+			Bucket:            aws.String(o.BucketName),
+			Delimiter:         o.Delimiter,
+			Prefix:            o.Prefix,
+			MaxKeys:           o.MaxKeys,
+			ContinuationToken: o.PaginationToken,
+			StartAfter:        o.StartAfter,
 		},
 		o.S3Options...,
 	)
 
 	if err != nil {
-		return nil, fmt.Errorf("simplestorage: can't list %s/%s: %v", o.BucketName, prefix, err)
+		return nil, fmt.Errorf("simplestorage: can't list %s: %v", o.BucketName, err)
 	}
 
-	var result []Object
+	result := &ListResult{
+		Items:   make([]Object, 0, len(resp.Contents)),
+		HasMore: lower(resp.IsTruncated, false),
+	}
+
+	if resp.NextContinuationToken != nil {
+		result.NextToken = *resp.NextContinuationToken
+	}
 
 	for _, obj := range resp.Contents {
-		result = append(result, Object{
+		result.Items = append(result.Items, Object{
 			Bucket:       o.BucketName,
-			Key:          *obj.Key,
+			Key:          lower(obj.Key, ""),
 			Etag:         lower(obj.ETag, ""),
 			Size:         lower(obj.Size, 0),
 			LastModified: lower(obj.LastModified, time.Time{}),
