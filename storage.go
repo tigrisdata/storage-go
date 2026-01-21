@@ -12,6 +12,7 @@ import (
 	awsConfig "github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/credentials"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
+	"github.com/aws/smithy-go/logging"
 )
 
 const (
@@ -125,7 +126,9 @@ func New(ctx context.Context, options ...Option) (*Client, error) {
 		creds = credentials.NewStaticCredentialsProvider(o.AccessKeyID, o.SecretAccessKey, "")
 	}
 
-	cfg, err := awsConfig.LoadDefaultConfig(ctx)
+	cfg, err := awsConfig.LoadDefaultConfig(ctx,
+		awsConfig.WithLogger(logging.Nop{}),
+	)
 	if err != nil {
 		return nil, fmt.Errorf("failed to load Tigris config: %w", err)
 	}
