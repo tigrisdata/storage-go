@@ -1,3 +1,9 @@
+# [0.4.0](https://github.com/tigrisdata/storage-go/compare/v0.3.0...v0.4.0) (2026-01-26)
+
+### Features
+
+- **simplestorage:** add Head method to Client ([#20](https://github.com/tigrisdata/storage-go/issues/20)) ([3366180](https://github.com/tigrisdata/storage-go/commit/3366180a41e086380e464cf31611db2d65702c1d))
+
 # [0.3.0](https://github.com/tigrisdata/storage-go/compare/v0.2.0...v0.3.0) (2026-01-26)
 
 ### Features
