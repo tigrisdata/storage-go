@@ -230,14 +230,15 @@ func (c *Client) Head(ctx context.Context, key string, opts ...ClientOption) (*O
 	}
 
 	return &Object{
-		Bucket:       o.BucketName,
-		Key:          key,
-		ContentType:  lower(resp.ContentType, "application/octet-stream"),
-		Etag:         lower(resp.ETag, ""),
-		Size:         lower(resp.ContentLength, 0),
-		Version:      lower(resp.VersionId, ""),
-		LastModified: lower(resp.LastModified, time.Time{}),
-		Metadata:     resp.Metadata,
+		Bucket:             o.BucketName,
+		Key:                key,
+		ContentType:        lower(resp.ContentType, "application/octet-stream"),
+		ContentDisposition: lower(resp.ContentDisposition, ""),
+		Etag:               lower(resp.ETag, ""),
+		Size:               lower(resp.ContentLength, 0),
+		Version:            lower(resp.VersionId, ""),
+		LastModified:       lower(resp.LastModified, time.Time{}),
+		Metadata:           resp.Metadata,
 	}, nil
 }
 
