@@ -43,14 +43,11 @@ jobs:
           # Create and checkout release branch
           git checkout -b "${BRANCH_NAME}"
 
-          # Run semantic-release in dry-run mode first to get the version
-          npm run semantic-release-dry-run || true
-
           # Run semantic-release on the release branch
           npx semantic-release --debug
 
           # Check if semantic-release made changes
-          if git diff --quiet HEAD~1 HEAD 2>/dev/null || [ $(git rev-list --count HEAD ^main) -eq 0 ]; then
+          if git diff --quiet origin/main HEAD 2>/dev/null || [ $(git rev-list --count HEAD ^origin/main) -eq 0 ]; then
             echo "No release created"
             exit 0
           fi
