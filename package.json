@@ -1,6 +1,6 @@
 {
   "name": "@tigrisdata/storage-go",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "The Tigris Go SDK!",
   "homepage": "https://github.com/tigrisdata/storage-go#readme",
   "bugs": {
