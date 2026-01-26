@@ -154,16 +154,17 @@ func New(ctx context.Context, options ...Option) (*Client, error) {
 // Some calls may not populate all fields. Ensure that the values are valid before
 // consuming them.
 type Object struct {
-	Bucket             string        // Bucket the object is in
-	Key                string        // Key for the object
-	ContentType        string        // MIME type for the object or application/octet-stream
-	ContentDisposition string        // Content disposition of the object (inline or attachment)
-	Etag               string        // Entity tag for the object (usually a checksum)
-	Version            string        // Version tag for the object
-	Size               int64         // Size of the object in bytes or 0 if unknown
-	LastModified       time.Time     // Creation date of the object
-	URL                string        // Public or presigned URL for the object
-	Body               io.ReadCloser // Body of the object so it can be read, don't forget to close it.
+	Bucket             string            // Bucket the object is in
+	Key                string            // Key for the object
+	ContentType        string            // MIME type for the object or application/octet-stream
+	ContentDisposition string            // Content disposition of the object (inline or attachment)
+	Etag               string            // Entity tag for the object (usually a checksum)
+	Version            string            // Version tag for the object
+	Size               int64             // Size of the object in bytes or 0 if unknown
+	LastModified       time.Time         // Creation date of the object
+	Metadata           map[string]string // Custom metadata headers
+	URL                string            // Public or presigned URL for the object
+	Body               io.ReadCloser     // Body of the object so it can be read, don't forget to close it.
 }
 
 // ListResult contains the result of a List operation, including pagination information.
@@ -202,7 +203,42 @@ func (c *Client) Get(ctx context.Context, key string, opts ...ClientOption) (*Ob
 		Size:         lower(resp.ContentLength, 0),
 		Version:      lower(resp.VersionId, ""),
 		LastModified: lower(resp.LastModified, time.Time{}),
+		Metadata:     resp.Metadata,
 		Body:         resp.Body,
+	}, nil
+}
+
+// Head retrieves metadata for an object without downloading its content.
+func (c *Client) Head(ctx context.Context, key string, opts ...ClientOption) (*Object, error) {
+	o := new(ClientOptions).defaults(c.options)
+
+	for _, doer := range opts {
+		doer(&o)
+	}
+
+	resp, err := c.cli.HeadObject(
+		ctx,
+		&s3.HeadObjectInput{
+			Bucket: aws.String(o.BucketName),
+			Key:    aws.String(key),
+		},
+		o.S3Options...,
+	)
+
+	if err != nil {
+		return nil, fmt.Errorf("simplestorage: can't head %s/%s: %v", o.BucketName, key, err)
+	}
+
+	return &Object{
+		Bucket:             o.BucketName,
+		Key:                key,
+		ContentType:        lower(resp.ContentType, "application/octet-stream"),
+		ContentDisposition: lower(resp.ContentDisposition, ""),
+		Etag:               lower(resp.ETag, ""),
+		Size:               lower(resp.ContentLength, 0),
+		Version:            lower(resp.VersionId, ""),
+		LastModified:       lower(resp.LastModified, time.Time{}),
+		Metadata:           resp.Metadata,
 	}, nil
 }
 
