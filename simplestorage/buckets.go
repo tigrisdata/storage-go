@@ -162,14 +162,12 @@ func (c *Client) ListBuckets(ctx context.Context, opts ...BucketOption) (*Bucket
 
 	for _, b := range resp.Buckets {
 		result.Buckets = append(result.Buckets, BucketInfo{
-			Name:    *b.Name,
+			Name:    lower(b.Name, ""),
 			Created: lower(b.CreationDate, time.Time{}),
 		})
 	}
 
-	if resp.ContinuationToken != nil {
-		result.NextToken = *resp.ContinuationToken
-	}
+	result.NextToken = lower(resp.ContinuationToken, "")
 
 	return result, nil
 }
