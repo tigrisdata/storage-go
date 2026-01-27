@@ -399,7 +399,22 @@ func (c *Client) PresignURL(ctx context.Context, method string, key string, expi
 		doer(&o)
 	}
 
-	return "", nil
+	// Create presign client
+	presignClient := s3.NewPresignClient(c.cli.Client)
+
+	// Route to appropriate presign method
+	switch method {
+	case http.MethodGet:
+		return presignURLGet(ctx, presignClient, o.BucketName, key, expiry)
+	case http.MethodPut:
+		// TODO: implement PUT presign
+		return "", fmt.Errorf("simplestorage: PUT presign not yet implemented")
+	case http.MethodDelete:
+		// TODO: implement DELETE presign
+		return "", fmt.Errorf("simplestorage: DELETE presign not yet implemented")
+	}
+
+	return "", nil // unreachable
 }
 
 // lower lowers the "pointer level" of the value by returning the value pointed
@@ -419,4 +434,17 @@ func raise[T comparable](v T) *T {
 		return nil
 	}
 	return &v
+}
+
+// presignURLGet generates a presigned URL for GET operations.
+func presignURLGet(ctx context.Context, client *s3.PresignClient, bucket, key string, expiry time.Duration) (string, error) {
+	presignResult, err := client.PresignGetObject(ctx, &s3.GetObjectInput{
+		Bucket: aws.String(bucket),
+		Key:    aws.String(key),
+	}, s3.WithPresignExpires(expiry))
+	if err != nil {
+		return "", fmt.Errorf("presign get: %w", err)
+	}
+
+	return presignResult.URL, nil
 }
