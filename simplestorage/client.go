@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net/http"
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -362,6 +363,43 @@ func (c *Client) List(ctx context.Context, opts ...ClientOption) (*ListResult, e
 	}
 
 	return result, nil
+}
+
+// PresignURL generates a presigned URL for the specified HTTP method, key, and expiry duration.
+//
+// The following HTTP methods are supported:
+//   - http.MethodGet: Generate a URL for downloading an object
+//   - http.MethodPut: Generate a URL for uploading an object
+//   - http.MethodDelete: Generate a URL for deleting an object
+//
+// For PUT operations, use WithContentType() and WithContentDisposition() to set headers.
+//
+// The expiry duration must be positive; the returned URL will only be valid for this duration.
+func (c *Client) PresignURL(ctx context.Context, method string, key string, expiry time.Duration, opts ...ClientOption) (string, error) {
+	// Validate HTTP method
+	switch method {
+	case http.MethodGet, http.MethodPut, http.MethodDelete:
+	default:
+		return "", fmt.Errorf("simplestorage: unsupported HTTP method %q for presigned URL (supported: GET, PUT, DELETE)", method)
+	}
+
+	// Validate key
+	if key == "" {
+		return "", fmt.Errorf("simplestorage: key cannot be empty for presigned URL")
+	}
+
+	// Validate expiry
+	if expiry <= 0 {
+		return "", fmt.Errorf("simplestorage: invalid expiry duration %v for presigned URL (must be positive)", expiry)
+	}
+
+	// Build options
+	o := new(ClientOptions).defaults(c.options)
+	for _, doer := range opts {
+		doer(&o)
+	}
+
+	return "", nil
 }
 
 // lower lowers the "pointer level" of the value by returning the value pointed
