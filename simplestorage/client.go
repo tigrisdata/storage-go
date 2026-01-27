@@ -407,8 +407,7 @@ func (c *Client) PresignURL(ctx context.Context, method string, key string, expi
 	case http.MethodGet:
 		return presignURLGet(ctx, presignClient, o.BucketName, key, expiry)
 	case http.MethodPut:
-		// TODO: implement PUT presign
-		return "", fmt.Errorf("simplestorage: PUT presign not yet implemented")
+		return presignURLPut(ctx, presignClient, o.BucketName, key, expiry, o)
 	case http.MethodDelete:
 		// TODO: implement DELETE presign
 		return "", fmt.Errorf("simplestorage: DELETE presign not yet implemented")
@@ -444,6 +443,29 @@ func presignURLGet(ctx context.Context, client *s3.PresignClient, bucket, key st
 	}, s3.WithPresignExpires(expiry))
 	if err != nil {
 		return "", fmt.Errorf("presign get: %w", err)
+	}
+
+	return presignResult.URL, nil
+}
+
+// presignURLPut generates a presigned URL for PUT operations.
+func presignURLPut(ctx context.Context, client *s3.PresignClient, bucket, key string, expiry time.Duration, opts ClientOptions) (string, error) {
+	input := &s3.PutObjectInput{
+		Bucket: aws.String(bucket),
+		Key:    aws.String(key),
+	}
+
+	// Apply optional headers
+	if opts.ContentType != nil {
+		input.ContentType = opts.ContentType
+	}
+	if opts.ContentDisposition != nil {
+		input.ContentDisposition = opts.ContentDisposition
+	}
+
+	presignResult, err := client.PresignPutObject(ctx, input, s3.WithPresignExpires(expiry))
+	if err != nil {
+		return "", fmt.Errorf("presign put: %w", err)
 	}
 
 	return presignResult.URL, nil
