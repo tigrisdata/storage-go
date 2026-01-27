@@ -78,6 +78,20 @@ func WithPaginationToken(token string) ClientOption {
 	}
 }
 
+// WithContentType sets the Content-Type header for presigned PUT URLs.
+func WithContentType(contentType string) ClientOption {
+	return func(co *ClientOptions) {
+		co.ContentType = aws.String(contentType)
+	}
+}
+
+// WithContentDisposition sets the Content-Disposition header for presigned PUT URLs.
+func WithContentDisposition(disposition string) ClientOption {
+	return func(co *ClientOptions) {
+		co.ContentDisposition = aws.String(disposition)
+	}
+}
+
 // ClientOptions is the collection of options that are set for individual Tigris
 // calls.
 type ClientOptions struct {
@@ -90,6 +104,10 @@ type ClientOptions struct {
 	Delimiter       *string
 	Prefix          *string
 	PaginationToken *string
+
+	// Presign options
+	ContentType        *string
+	ContentDisposition *string
 }
 
 // defaults populates client options from the global Options.
