@@ -409,8 +409,7 @@ func (c *Client) PresignURL(ctx context.Context, method string, key string, expi
 	case http.MethodPut:
 		return presignURLPut(ctx, presignClient, o.BucketName, key, expiry, o)
 	case http.MethodDelete:
-		// TODO: implement DELETE presign
-		return "", fmt.Errorf("simplestorage: DELETE presign not yet implemented")
+		return presignURLDelete(ctx, presignClient, o.BucketName, key, expiry)
 	}
 
 	return "", nil // unreachable
@@ -466,6 +465,19 @@ func presignURLPut(ctx context.Context, client *s3.PresignClient, bucket, key st
 	presignResult, err := client.PresignPutObject(ctx, input, s3.WithPresignExpires(expiry))
 	if err != nil {
 		return "", fmt.Errorf("presign put: %w", err)
+	}
+
+	return presignResult.URL, nil
+}
+
+// presignURLDelete generates a presigned URL for DELETE operations.
+func presignURLDelete(ctx context.Context, client *s3.PresignClient, bucket, key string, expiry time.Duration) (string, error) {
+	presignResult, err := client.PresignDeleteObject(ctx, &s3.DeleteObjectInput{
+		Bucket: aws.String(bucket),
+		Key:    aws.String(key),
+	}, s3.WithPresignExpires(expiry))
+	if err != nil {
+		return "", fmt.Errorf("presign delete: %w", err)
 	}
 
 	return presignResult.URL, nil
