@@ -1,7 +1,9 @@
 package simplestorage
 
 import (
+	"context"
 	"net/http"
+	"strings"
 	"testing"
 	"time"
 )
@@ -76,15 +78,20 @@ func TestPresignURL(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Note: These tests require integration with a real Tigris bucket
-			// For now, we test validation logic only
-			// TODO: Add integration tests with presigned URL verification
-
-			if tt.key == "" || tt.expiry <= 0 || (tt.method != http.MethodGet && tt.method != http.MethodPut && tt.method != http.MethodDelete) {
-				// For error cases, we'll validate the method signature exists
-				// Skip actual URL generation for now
-				t.Skip("validation tests - implementation will add error handling")
+			if tt.wantErr {
+				// Test validation logic
+				cli := &Client{options: Options{BucketName: "test-bucket"}}
+				_, err := cli.PresignURL(context.Background(), tt.method, tt.key, tt.expiry, tt.opts...)
+				if err == nil {
+					t.Errorf("expected error containing %q, got nil", tt.errContains)
+				} else if !strings.Contains(err.Error(), tt.errContains) {
+					t.Errorf("error should contain %q, got %q", tt.errContains, err.Error())
+				}
+				return
 			}
+
+			// Success cases - integration tests requiring real Tigris bucket
+			t.Skip("integration test - requires real Tigris bucket")
 		})
 	}
 }
