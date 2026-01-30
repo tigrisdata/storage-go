@@ -1,3 +1,10 @@
+# [0.5.0](https://github.com/tigrisdata/storage-go/compare/v0.4.1...v0.5.0) (2026-01-30)
+
+### Features
+
+- **simplestorage:** add For method to create bucket-scoped client copies ([#23](https://github.com/tigrisdata/storage-go/issues/23)) ([a64539b](https://github.com/tigrisdata/storage-go/commit/a64539b180f5bd060cf67d4b095519f177140d8c))
+- **simplestorage:** add presigned URL API ([#22](https://github.com/tigrisdata/storage-go/issues/22)) ([0271427](https://github.com/tigrisdata/storage-go/commit/02714270b6c2682484be10d27f2f6decb8d4dc7b))
+
 ## [0.4.1](https://github.com/tigrisdata/storage-go/compare/v0.4.0...v0.4.1) (2026-01-27)
 
 ### Bug Fixes
