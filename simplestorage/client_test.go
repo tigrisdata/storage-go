@@ -108,3 +108,87 @@ func TestNew(t *testing.T) {
 		})
 	}
 }
+
+func TestClient_For(t *testing.T) {
+	tests := []struct {
+		name           string
+		originalBucket string
+		newBucket      string
+	}{
+		{
+			name:           "creates client with new bucket",
+			originalBucket: "original-bucket",
+			newBucket:      "new-bucket",
+		},
+		{
+			name:           "empty bucket name is accepted",
+			originalBucket: "original-bucket",
+			newBucket:      "",
+		},
+		{
+			name:           "preserves all options fields",
+			originalBucket: "original-bucket",
+			newBucket:      "new-bucket",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			os.Unsetenv("TIGRIS_STORAGE_ACCESS_KEY_ID")
+			os.Unsetenv("TIGRIS_STORAGE_SECRET_ACCESS_KEY")
+
+			original, err := New(
+				context.Background(),
+				WithBucket(tt.originalBucket),
+				WithEndpoint("https://test.endpoint.dev"),
+				WithRegion("test-region"),
+				WithPathStyle(true),
+				WithAccessKeypair("test-key-id", "test-secret"),
+			)
+			if err != nil && !errors.Is(err, ErrNoBucketName) {
+				t.Fatalf("New() unexpected error: %v", err)
+			}
+			if original == nil {
+				t.Skip("skipping test: client creation failed")
+			}
+
+			newClient := original.For(tt.newBucket)
+
+			// Verify it's a different instance
+			if newClient == original {
+				t.Error("For() returned the same client instance")
+			}
+
+			// Verify the bucket is set correctly
+			if newClient.options.BucketName != tt.newBucket {
+				t.Errorf("For() bucket = %q, want %q", newClient.options.BucketName, tt.newBucket)
+			}
+
+			// Verify the original client is unchanged
+			if original.options.BucketName != tt.originalBucket {
+				t.Errorf("original client bucket = %q, want %q", original.options.BucketName, tt.originalBucket)
+			}
+
+			// Verify the underlying storage client is shared
+			if newClient.cli != original.cli {
+				t.Error("For() created a new underlying storage client instead of sharing it")
+			}
+
+			// Verify all other Options fields are preserved
+			if newClient.options.BaseEndpoint != original.options.BaseEndpoint {
+				t.Errorf("For() BaseEndpoint = %q, want %q", newClient.options.BaseEndpoint, original.options.BaseEndpoint)
+			}
+			if newClient.options.Region != original.options.Region {
+				t.Errorf("For() Region = %q, want %q", newClient.options.Region, original.options.Region)
+			}
+			if newClient.options.UsePathStyle != original.options.UsePathStyle {
+				t.Errorf("For() UsePathStyle = %v, want %v", newClient.options.UsePathStyle, original.options.UsePathStyle)
+			}
+			if newClient.options.AccessKeyID != original.options.AccessKeyID {
+				t.Errorf("For() AccessKeyID = %q, want %q", newClient.options.AccessKeyID, original.options.AccessKeyID)
+			}
+			if newClient.options.SecretAccessKey != original.options.SecretAccessKey {
+				t.Errorf("For() SecretAccessKey = %q, want %q", newClient.options.SecretAccessKey, original.options.SecretAccessKey)
+			}
+		})
+	}
+}

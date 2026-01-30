@@ -149,6 +149,19 @@ func New(ctx context.Context, options ...Option) (*Client, error) {
 	}, nil
 }
 
+// For returns a copy of the Client with the bucket set as the default for all operations.
+//
+// This is useful when you need to work with multiple buckets while reusing the same
+// underlying connection and configuration.
+func (c *Client) For(bucket string) *Client {
+	o := c.options
+	o.BucketName = bucket
+	return &Client{
+		cli:     c.cli,
+		options: o,
+	}
+}
+
 // Object contains metadata about an individual object read from or put into Tigris.
 //
 // Some calls may not populate all fields. Ensure that the values are valid before
