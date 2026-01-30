@@ -65,3 +65,14 @@ jobs:
             --base main \
             --head "${BRANCH_NAME}" \
             --label "release"
+
+      - name: Clean up old release branches
+        if: always()
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # Get all release branches except the current one
+          for branch in $(git ls-remote --heads origin "release-*" | awk '{print $2}' | sed 's|refs/heads/||' | grep -v "^${BRANCH_NAME}$"); do
+            echo "Deleting old release branch: ${branch}"
+            git push origin --delete "${branch}" || true
+          done
