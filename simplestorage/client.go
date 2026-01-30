@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net/http"
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -78,6 +79,20 @@ func WithPaginationToken(token string) ClientOption {
 	}
 }
 
+// WithContentType sets the Content-Type header for presigned PUT URLs.
+func WithContentType(contentType string) ClientOption {
+	return func(co *ClientOptions) {
+		co.ContentType = aws.String(contentType)
+	}
+}
+
+// WithContentDisposition sets the Content-Disposition header for presigned PUT URLs.
+func WithContentDisposition(disposition string) ClientOption {
+	return func(co *ClientOptions) {
+		co.ContentDisposition = aws.String(disposition)
+	}
+}
+
 // ClientOptions is the collection of options that are set for individual Tigris
 // calls.
 type ClientOptions struct {
@@ -90,6 +105,10 @@ type ClientOptions struct {
 	Delimiter       *string
 	Prefix          *string
 	PaginationToken *string
+
+	// Presign options
+	ContentType        *string
+	ContentDisposition *string
 }
 
 // defaults populates client options from the global Options.
@@ -344,6 +363,56 @@ func (c *Client) List(ctx context.Context, opts ...ClientOption) (*ListResult, e
 	return result, nil
 }
 
+// PresignURL generates a presigned URL for the specified HTTP method, key, and expiry duration.
+//
+// The following HTTP methods are supported:
+//   - http.MethodGet: Generate a URL for downloading an object
+//   - http.MethodPut: Generate a URL for uploading an object
+//   - http.MethodDelete: Generate a URL for deleting an object
+//
+// For PUT operations, use WithContentType() and WithContentDisposition() to set headers.
+//
+// The expiry duration must be positive; the returned URL will only be valid for this duration.
+func (c *Client) PresignURL(ctx context.Context, method string, key string, expiry time.Duration, opts ...ClientOption) (string, error) {
+	// Validate HTTP method
+	switch method {
+	case http.MethodGet, http.MethodPut, http.MethodDelete:
+	default:
+		return "", fmt.Errorf("simplestorage: unsupported HTTP method %q for presigned URL (supported: GET, PUT, DELETE)", method)
+	}
+
+	// Validate key
+	if key == "" {
+		return "", fmt.Errorf("simplestorage: key cannot be empty for presigned URL")
+	}
+
+	// Validate expiry
+	if expiry <= 0 {
+		return "", fmt.Errorf("simplestorage: invalid expiry duration %v for presigned URL (must be positive)", expiry)
+	}
+
+	// Build options
+	o := new(ClientOptions).defaults(c.options)
+	for _, doer := range opts {
+		doer(&o)
+	}
+
+	// Create presign client
+	presignClient := s3.NewPresignClient(c.cli.Client)
+
+	// Route to appropriate presign method
+	switch method {
+	case http.MethodGet:
+		return presignURLGet(ctx, presignClient, o.BucketName, key, expiry)
+	case http.MethodPut:
+		return presignURLPut(ctx, presignClient, o.BucketName, key, expiry, o)
+	case http.MethodDelete:
+		return presignURLDelete(ctx, presignClient, o.BucketName, key, expiry)
+	}
+
+	return "", nil // unreachable
+}
+
 // lower lowers the "pointer level" of the value by returning the value pointed
 // to by p, or defaultVal if p is nil.
 func lower[T any](p *T, defaultVal T) T {
@@ -361,4 +430,53 @@ func raise[T comparable](v T) *T {
 		return nil
 	}
 	return &v
+}
+
+// presignURLGet generates a presigned URL for GET operations.
+func presignURLGet(ctx context.Context, client *s3.PresignClient, bucket, key string, expiry time.Duration) (string, error) {
+	presignResult, err := client.PresignGetObject(ctx, &s3.GetObjectInput{
+		Bucket: aws.String(bucket),
+		Key:    aws.String(key),
+	}, s3.WithPresignExpires(expiry))
+	if err != nil {
+		return "", fmt.Errorf("presign get: %w", err)
+	}
+
+	return presignResult.URL, nil
+}
+
+// presignURLPut generates a presigned URL for PUT operations.
+func presignURLPut(ctx context.Context, client *s3.PresignClient, bucket, key string, expiry time.Duration, opts ClientOptions) (string, error) {
+	input := &s3.PutObjectInput{
+		Bucket: aws.String(bucket),
+		Key:    aws.String(key),
+	}
+
+	// Apply optional headers
+	if opts.ContentType != nil {
+		input.ContentType = opts.ContentType
+	}
+	if opts.ContentDisposition != nil {
+		input.ContentDisposition = opts.ContentDisposition
+	}
+
+	presignResult, err := client.PresignPutObject(ctx, input, s3.WithPresignExpires(expiry))
+	if err != nil {
+		return "", fmt.Errorf("presign put: %w", err)
+	}
+
+	return presignResult.URL, nil
+}
+
+// presignURLDelete generates a presigned URL for DELETE operations.
+func presignURLDelete(ctx context.Context, client *s3.PresignClient, bucket, key string, expiry time.Duration) (string, error) {
+	presignResult, err := client.PresignDeleteObject(ctx, &s3.DeleteObjectInput{
+		Bucket: aws.String(bucket),
+		Key:    aws.String(key),
+	}, s3.WithPresignExpires(expiry))
+	if err != nil {
+		return "", fmt.Errorf("presign delete: %w", err)
+	}
+
+	return presignResult.URL, nil
 }
