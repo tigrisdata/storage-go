@@ -286,8 +286,8 @@ func (c *Client) Put(ctx context.Context, obj *Object, opts ...ClientOption) (*O
 	}
 
 	obj.Bucket = o.BucketName
-	obj.Etag = *resp.ETag
-	obj.Version = *resp.VersionId
+	obj.Etag = lower(resp.ETag, "")
+	obj.Version = lower(resp.VersionId, "")
 
 	return obj, nil
 }
@@ -348,9 +348,7 @@ func (c *Client) List(ctx context.Context, opts ...ClientOption) (*ListResult, e
 		HasMore: lower(resp.IsTruncated, false),
 	}
 
-	if resp.NextContinuationToken != nil {
-		result.NextToken = *resp.NextContinuationToken
-	}
+	result.NextToken = lower(resp.NextContinuationToken, "")
 
 	for _, obj := range resp.Contents {
 		result.Items = append(result.Items, Object{
