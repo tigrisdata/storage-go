@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"net/http"
 	"time"
 
 	simplestorage "github.com/tigrisdata/storage-go/simplestorage"
@@ -20,7 +21,7 @@ func ExampleClient_PresignURL_get() {
 	}
 
 	// Generate a 1-hour URL for temporary download access
-	url, err := client.PresignURL(ctx, "GET", "documents/report.pdf", time.Hour)
+	url, err := client.PresignURL(ctx, http.MethodGet, "documents/report.pdf", time.Hour)
 	if err != nil {
 		log.Fatal(err) // handle the error here
 	}
@@ -39,7 +40,7 @@ func ExampleClient_PresignURL_put() {
 	}
 
 	// Generate a 15-minute URL for direct upload
-	url, err := client.PresignURL(ctx, "PUT", "uploads/avatar.png", 15*time.Minute,
+	url, err := client.PresignURL(ctx, http.MethodPut, "uploads/avatar.png", 15*time.Minute,
 		simplestorage.WithContentType("image/png"),
 		simplestorage.WithContentDisposition("attachment"),
 	)
@@ -62,7 +63,7 @@ func ExampleClient_PresignURL_delete() {
 	}
 
 	// Generate a 30-minute URL for deletion
-	url, err := client.PresignURL(ctx, "DELETE", "temp/file.txt", 30*time.Minute)
+	url, err := client.PresignURL(ctx, http.MethodDelete, "temp/file.txt", 30*time.Minute)
 	if err != nil {
 		log.Fatal(err) // handle the error here
 	}

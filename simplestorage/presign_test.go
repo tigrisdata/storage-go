@@ -61,6 +61,14 @@ func TestPresignURL(t *testing.T) {
 			errContains: "invalid expiry duration",
 		},
 		{
+			name:        "negative expiry fails",
+			method:      http.MethodGet,
+			key:         "test/file.txt",
+			expiry:      -1 * time.Minute,
+			wantErr:     true,
+			errContains: "invalid expiry duration",
+		},
+		{
 			name:   "PUT with ContentType",
 			method: http.MethodPut,
 			key:    "test/image.png",
