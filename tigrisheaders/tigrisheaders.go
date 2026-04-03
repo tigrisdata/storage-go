@@ -169,3 +169,4 @@ func WithRename() func(*s3.Options) {
 		options.APIOptions = append(options.APIOptions, http.AddHeaderValue("X-Tigris-Rename", "true"))
 	}
 }
+
