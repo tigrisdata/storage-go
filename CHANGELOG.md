@@ -1,3 +1,9 @@
+# [0.6.0](https://github.com/tigrisdata/storage-go/compare/v0.5.0...v0.6.0) (2026-04-06)
+
+### Features
+
+- add Bundle API support for streaming multi-object tar download ([1a89e45](https://github.com/tigrisdata/storage-go/commit/1a89e45f0232b0377f32bc41b730bf648ce9f06e))
+
 # [0.5.0](https://github.com/tigrisdata/storage-go/compare/v0.4.1...v0.5.0) (2026-01-30)
 
 ### Features
