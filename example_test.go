@@ -1,7 +1,9 @@
 package storage_test
 
 import (
+	"archive/tar"
 	"context"
+	"io"
 	"log"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -139,5 +141,49 @@ func ExampleClient_RenameObject() {
 	})
 	if err != nil {
 		log.Fatal(err)
+	}
+}
+
+func ExampleClient_BundleObjects() {
+	ctx := context.Background()
+
+	client, err := storage.New(ctx)
+	if err != nil {
+		log.Fatal(err) // handle the error here
+	}
+
+	// Fetch multiple objects as a streaming tar archive in a single request.
+	output, err := client.BundleObjects(ctx, &storage.BundleObjectsInput{
+		Bucket: "my-dataset-bucket",
+		Keys: []string{
+			"train/img_001.jpg",
+			"train/img_002.jpg",
+			"train/img_003.jpg",
+		},
+	})
+	if err != nil {
+		log.Fatal(err) // handle the error here
+	}
+	defer output.Body.Close()
+
+	// Iterate tar entries as they arrive.
+	tr := tar.NewReader(output.Body)
+	for {
+		hdr, err := tr.Next()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			log.Fatal(err) // handle the error here
+		}
+
+		// Read the object content.
+		data, err := io.ReadAll(tr)
+		if err != nil {
+			log.Fatal(err) // handle the error here
+		}
+
+		_ = hdr.Name // object key, e.g. "train/img_001.jpg"
+		_ = data     // object content
 	}
 }

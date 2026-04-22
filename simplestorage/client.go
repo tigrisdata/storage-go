@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net/http"
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -73,19 +74,40 @@ func WithMaxKeys(maxKeys int32) ClientOption {
 	}
 }
 
-// WithDelimiter sets the delimiter character for grouping keys in List calls.
-// Commonly set to "/" to emulate directory-like grouping.
+// WithDelimiter sets a delimiter for grouping keys in List calls.
 func WithDelimiter(delimiter string) ClientOption {
 	return func(co *ClientOptions) {
 		co.Delimiter = aws.String(delimiter)
 	}
 }
 
-// WithPaginationToken sets the continuation token for paginated List calls.
-// Use the value of ListResult.PaginationToken from a previous page.
+// WithPrefix sets the prefix to filter keys in List calls.
+func WithPrefix(prefix string) ClientOption {
+	return func(co *ClientOptions) {
+		co.Prefix = aws.String(prefix)
+	}
+}
+
+// WithPaginationToken sets the pagination token to continue listing objects.
 func WithPaginationToken(token string) ClientOption {
 	return func(co *ClientOptions) {
 		co.PaginationToken = aws.String(token)
+	}
+}
+
+// WithContentType sets the Content-Type header. Used by Put (the object
+// Content-Type takes precedence when non-empty) and by presigned PUT URLs.
+func WithContentType(contentType string) ClientOption {
+	return func(co *ClientOptions) {
+		co.ContentType = aws.String(contentType)
+	}
+}
+
+// WithContentDisposition sets the Content-Disposition header for Put operations
+// and presigned PUT URLs.
+func WithContentDisposition(disposition string) ClientOption {
+	return func(co *ClientOptions) {
+		co.ContentDisposition = aws.String(disposition)
 	}
 }
 
@@ -134,17 +156,25 @@ func WithAllowOverwrite(allow bool) ClientOption {
 	}
 }
 
-// WithContentDisposition sets the Content-Disposition header for Put operations.
-func WithContentDisposition(disposition string) ClientOption {
-	return func(co *ClientOptions) {
-		co.ContentDisposition = aws.String(disposition)
-	}
-}
-
-// WithMultipartUpload enables multipart upload for files above the specified size threshold in bytes.
+// WithMultipartUpload enables multipart upload for objects whose Size exceeds
+// the given threshold (in bytes).
 func WithMultipartUpload(threshold int64) ClientOption {
 	return func(co *ClientOptions) {
 		co.MultipartThreshold = aws.Int64(threshold)
+	}
+}
+
+// UploadProgress tracks upload progress.
+type UploadProgress struct {
+	Loaded     int64   // Bytes uploaded
+	Total      int64   // Total bytes
+	Percentage float64 // Percentage complete
+}
+
+// WithUploadProgress sets a callback to track upload progress in Put operations.
+func WithUploadProgress(callback func(UploadProgress)) ClientOption {
+	return func(co *ClientOptions) {
+		co.UploadProgressCallback = callback
 	}
 }
 
@@ -157,59 +187,6 @@ func WithAccessType(access AccessType) ClientOption {
 	}
 }
 
-// UploadProgress tracks upload progress.
-type UploadProgress struct {
-	Loaded     int64   // Bytes uploaded
-	Total      int64   // Total bytes
-	Percentage float64 // Percentage complete
-}
-
-// WithUploadProgress sets a callback function to track upload progress in Put operations.
-func WithUploadProgress(callback func(UploadProgress)) ClientOption {
-	return func(co *ClientOptions) {
-		co.UploadProgressCallback = callback
-	}
-}
-
-// WithPresignedExpiresIn sets the expiration time for presigned URLs (in seconds).
-func WithPresignedExpiresIn(expiresIn int) ClientOption {
-	return func(co *ClientOptions) {
-		co.PresignedExpiresIn = aws.Int(expiresIn)
-	}
-}
-
-// WithPresignedContentType sets the content type for presigned PUT URLs.
-func WithPresignedContentType(contentType string) ClientOption {
-	return func(co *ClientOptions) {
-		co.PresignedContentType = aws.String(contentType)
-	}
-}
-
-// PresignOperation specifies the HTTP operation that a presigned URL authorizes.
-type PresignOperation string
-
-const (
-	// PresignOpGet authorizes a GET (download) on the object.
-	PresignOpGet PresignOperation = "get"
-	// PresignOpPut authorizes a PUT (upload) on the object.
-	PresignOpPut PresignOperation = "put"
-)
-
-// WithPresignedOperation selects the HTTP operation for GetPresignedUrl.
-// Defaults to PresignOpGet when unset.
-func WithPresignedOperation(op PresignOperation) ClientOption {
-	return func(co *ClientOptions) {
-		co.PresignedOperation = op
-	}
-}
-
-// WithPrefix sets the prefix filter for List operations.
-func WithPrefix(prefix string) ClientOption {
-	return func(co *ClientOptions) {
-		co.Prefix = aws.String(prefix)
-	}
-}
-
 // ClientOptions is the collection of options that are set for individual Tigris
 // calls.
 type ClientOptions struct {
@@ -217,11 +194,15 @@ type ClientOptions struct {
 	S3Options  []func(*s3.Options)
 
 	// List options
-	Prefix          *string
 	StartAfter      *string
 	MaxKeys         *int32
 	Delimiter       *string
+	Prefix          *string
 	PaginationToken *string
+
+	// Put and presign options
+	ContentType        *string
+	ContentDisposition *string
 
 	// Snapshot version for Get, Head, List operations
 	SnapshotVersion *string
@@ -234,50 +215,9 @@ type ClientOptions struct {
 	// Put options
 	RandomSuffix           bool
 	AllowOverwrite         *bool
-	ContentDisposition     *string
 	MultipartThreshold     *int64
 	UploadProgressCallback func(UploadProgress)
 	AccessType             AccessType
-
-	// Presigned URL options
-	PresignedExpiresIn   *int
-	PresignedContentType *string
-	PresignedOperation   PresignOperation
-}
-
-// HeadResponse contains metadata about an object returned by Head.
-type HeadResponse struct {
-	Path               string    // Object key
-	Size               int64     // Size in bytes
-	Modified           time.Time // Last modified time
-	ContentType        string    // MIME type
-	ContentDisposition string    // Content-Disposition header
-	URL                string    // Presigned URL for the object
-}
-
-// PutResponse contains the result of a Put operation.
-type PutResponse struct {
-	Path               string    // Object key
-	Size               int64     // Size in bytes
-	Modified           time.Time // Last modified time
-	ContentType        string    // MIME type
-	ContentDisposition string    // Content-Disposition header
-	URL                string    // Presigned URL for the object
-}
-
-// ListResult contains the results of a List operation.
-type ListResult struct {
-	Items           []Object // List of objects
-	CommonPrefixes  []string // Common prefixes grouped by delimiter (populated when WithDelimiter is set)
-	PaginationToken string   // Token for next page
-	HasMore         bool     // Whether more results exist
-}
-
-// GetPresignedUrlResult contains the result of GetPresignedUrl.
-type GetPresignedUrlResult struct {
-	URL       string // Presigned URL
-	ExpiresIn int    // Expiration time in seconds
-	Method    string // HTTP method ('get' or 'put')
 }
 
 // defaults populates client options from the global Options.
@@ -337,19 +277,43 @@ func New(ctx context.Context, options ...Option) (*Client, error) {
 	}, nil
 }
 
+// For returns a copy of the Client with the bucket set as the default for all operations.
+//
+// This is useful when you need to work with multiple buckets while reusing the same
+// underlying connection and configuration.
+func (c *Client) For(bucket string) *Client {
+	o := c.options
+	o.BucketName = bucket
+	return &Client{
+		cli:     c.cli,
+		options: o,
+	}
+}
+
 // Object contains metadata about an individual object read from or put into Tigris.
 //
 // Some calls may not populate all fields. Ensure that the values are valid before
 // consuming them.
 type Object struct {
-	Bucket       string        // Bucket the object is in
-	Key          string        // Key for the object
-	ContentType  string        // MIME type for the object or application/octet-stream
-	Etag         string        // Entity tag for the object (usually a checksum)
-	Version      string        // Version tag for the object
-	Size         int64         // Size of the object in bytes or 0 if unknown
-	LastModified time.Time     // Creation date of the object
-	Body         io.ReadCloser // Body of the object so it can be read, don't forget to close it.
+	Bucket             string            // Bucket the object is in
+	Key                string            // Key for the object
+	ContentType        string            // MIME type for the object or application/octet-stream
+	ContentDisposition string            // Content disposition of the object (inline or attachment)
+	Etag               string            // Entity tag for the object (usually a checksum)
+	Version            string            // Version tag for the object
+	Size               int64             // Size of the object in bytes or 0 if unknown
+	LastModified       time.Time         // Creation date of the object
+	Metadata           map[string]string // Custom metadata headers
+	URL                string            // Public or presigned URL for the object
+	Body               io.ReadCloser     // Body of the object so it can be read, don't forget to close it.
+}
+
+// ListResult contains the result of a List operation, including pagination information.
+type ListResult struct {
+	Items          []Object // List of objects
+	CommonPrefixes []string // Common prefixes grouped by delimiter (populated when WithDelimiter is set)
+	NextToken      string   // Pagination token for the next page
+	HasMore        bool     // Whether there are more objects to list
 }
 
 // Get fetches the contents of an object and its metadata from Tigris.
@@ -384,13 +348,13 @@ func (c *Client) Get(ctx context.Context, key string, opts ...ClientOption) (*Ob
 		Size:         lower(resp.ContentLength, 0),
 		Version:      lower(resp.VersionId, ""),
 		LastModified: lower(resp.LastModified, time.Time{}),
+		Metadata:     resp.Metadata,
 		Body:         resp.Body,
 	}, nil
 }
 
-// Head fetches metadata about an object without downloading its body.
-// Returns HeadResponse with metadata and a presigned URL for accessing the object.
-func (c *Client) Head(ctx context.Context, key string, opts ...ClientOption) (*HeadResponse, error) {
+// Head retrieves metadata for an object without downloading its content.
+func (c *Client) Head(ctx context.Context, key string, opts ...ClientOption) (*Object, error) {
 	o := new(ClientOptions).defaults(c.options)
 
 	for _, doer := range opts {
@@ -410,44 +374,34 @@ func (c *Client) Head(ctx context.Context, key string, opts ...ClientOption) (*H
 		return nil, fmt.Errorf("simplestorage: can't head %s/%s: %v", o.BucketName, key, err)
 	}
 
-	// Create presigner for generating presigned URL
-	presignClient := s3.NewPresignClient(c.cli.S3(), func(po *s3.PresignOptions) {
-		po.ClientOptions = o.S3Options
-	})
-
-	// Generate presigned GET URL for the object
-	presignResult, err := presignClient.PresignGetObject(ctx, &s3.GetObjectInput{
-		Bucket: aws.String(o.BucketName),
-		Key:    aws.String(key),
-	})
-	if err != nil {
-		return nil, fmt.Errorf("simplestorage: can't presign get for %s/%s: %v", o.BucketName, key, err)
-	}
-
-	return &HeadResponse{
-		Path:               key,
-		Size:               lower(resp.ContentLength, 0),
-		Modified:           lower(resp.LastModified, time.Time{}),
+	return &Object{
+		Bucket:             o.BucketName,
+		Key:                key,
 		ContentType:        lower(resp.ContentType, "application/octet-stream"),
 		ContentDisposition: lower(resp.ContentDisposition, ""),
-		URL:                presignResult.URL,
+		Etag:               lower(resp.ETag, ""),
+		Size:               lower(resp.ContentLength, 0),
+		Version:            lower(resp.VersionId, ""),
+		LastModified:       lower(resp.LastModified, time.Time{}),
+		Metadata:           resp.Metadata,
 	}, nil
 }
 
 // Put puts the contents of an object into Tigris.
-// Returns PutResponse with metadata and a presigned URL for accessing the uploaded object.
-func (c *Client) Put(ctx context.Context, obj *Object, opts ...ClientOption) (*PutResponse, error) {
+//
+// The returned *Object is the same pointer as obj with Bucket, Key, Etag, and
+// Version populated from the response. When WithRandomSuffix is used, obj.Key
+// is rewritten to the suffixed key actually stored.
+func (c *Client) Put(ctx context.Context, obj *Object, opts ...ClientOption) (*Object, error) {
 	o := new(ClientOptions).defaults(c.options)
 
 	for _, doer := range opts {
 		doer(&o)
 	}
 
-	// Handle random suffix
 	key := obj.Key
 	if o.RandomSuffix {
-		suffix := generateRandomSuffix(12)
-		key = fmt.Sprintf("%s-%s", key, suffix)
+		key = fmt.Sprintf("%s-%s", key, generateRandomSuffix(12))
 	}
 
 	// Disallow overwrites server-side using If-Match: "" so the check is atomic.
@@ -464,61 +418,180 @@ func (c *Client) Put(ctx context.Context, obj *Object, opts ...ClientOption) (*P
 		}
 	}
 
+	contentType := raise(obj.ContentType)
+	if contentType == nil {
+		contentType = o.ContentType
+	}
+
 	useMultipart := o.MultipartThreshold != nil && obj.Size > *o.MultipartThreshold
 
-	putInput := &s3.PutObjectInput{
-		Bucket:             aws.String(o.BucketName),
-		Key:                aws.String(key),
-		Body:               body,
-		ContentType:        raise(obj.ContentType),
-		ContentDisposition: o.ContentDisposition,
-		ACL:                objectACL(o.AccessType),
-	}
-	// manager.Uploader reads the body in chunks, so don't force a ContentLength
-	// on multipart uploads.
-	if !useMultipart {
-		putInput.ContentLength = raise(obj.Size)
-	}
+	var (
+		etag      string
+		versionID string
+	)
 
-	var err error
 	if useMultipart {
 		tm := transfermanager.New(c.cli.S3())
-		_, err = tm.UploadObject(ctx, &transfermanager.UploadObjectInput{
-			Bucket:             putInput.Bucket,
-			Key:                putInput.Key,
-			Body:               putInput.Body,
-			ContentType:        putInput.ContentType,
-			ContentDisposition: putInput.ContentDisposition,
+		resp, err := tm.UploadObject(ctx, &transfermanager.UploadObjectInput{
+			Bucket:             aws.String(o.BucketName),
+			Key:                aws.String(key),
+			Body:               body,
+			ContentType:        contentType,
+			ContentDisposition: o.ContentDisposition,
 			ACL:                tmObjectACL(o.AccessType),
 		})
+		if err != nil {
+			return nil, fmt.Errorf("simplestorage: can't put %s/%s: %v", o.BucketName, key, err)
+		}
+		etag = lower(resp.ETag, "")
+		versionID = lower(resp.VersionID, "")
 	} else {
-		_, err = c.cli.PutObject(ctx, putInput, o.S3Options...)
+		resp, err := c.cli.PutObject(ctx, &s3.PutObjectInput{
+			Bucket:             aws.String(o.BucketName),
+			Key:                aws.String(key),
+			Body:               body,
+			ContentType:        contentType,
+			ContentDisposition: o.ContentDisposition,
+			ContentLength:      raise(obj.Size),
+			ACL:                objectACL(o.AccessType),
+		}, o.S3Options...)
+		if err != nil {
+			return nil, fmt.Errorf("simplestorage: can't put %s/%s: %v", o.BucketName, key, err)
+		}
+		etag = lower(resp.ETag, "")
+		versionID = lower(resp.VersionId, "")
 	}
+
+	obj.Bucket = o.BucketName
+	obj.Key = key
+	obj.Etag = etag
+	obj.Version = versionID
+
+	return obj, nil
+}
+
+// Delete removes an object from Tigris.
+func (c *Client) Delete(ctx context.Context, key string, opts ...ClientOption) error {
+	o := new(ClientOptions).defaults(c.options)
+
+	for _, doer := range opts {
+		doer(&o)
+	}
+
+	if _, err := c.cli.DeleteObject(
+		ctx,
+		&s3.DeleteObjectInput{
+			Bucket: aws.String(o.BucketName),
+			Key:    aws.String(key),
+		},
+		o.S3Options...,
+	); err != nil {
+		return fmt.Errorf("simplestorage: can't delete %s/%s: %v", o.BucketName, key, err)
+	}
+
+	return nil
+}
+
+// List returns a list of objects matching the given criteria.
+//
+// The returned ListResult contains pagination information; use NextToken with
+// WithPaginationToken() to fetch the next page. HasMore indicates whether
+// additional objects are available. When WithDelimiter is set, CommonPrefixes
+// is populated with the grouped prefixes (for directory-like listings).
+func (c *Client) List(ctx context.Context, opts ...ClientOption) (*ListResult, error) {
+	o := new(ClientOptions).defaults(c.options)
+
+	for _, doer := range opts {
+		doer(&o)
+	}
+
+	resp, err := c.cli.ListObjectsV2(
+		ctx,
+		&s3.ListObjectsV2Input{
+			Bucket:            aws.String(o.BucketName),
+			Delimiter:         o.Delimiter,
+			Prefix:            o.Prefix,
+			MaxKeys:           o.MaxKeys,
+			ContinuationToken: o.PaginationToken,
+			StartAfter:        o.StartAfter,
+		},
+		o.S3Options...,
+	)
 
 	if err != nil {
-		return nil, fmt.Errorf("simplestorage: can't put %s/%s: %v", o.BucketName, key, err)
+		return nil, fmt.Errorf("simplestorage: can't list %s: %v", o.BucketName, err)
 	}
 
-	// Create presigner for generating presigned URL
-	presignClient := s3.NewPresignClient(c.cli.S3())
-
-	// Generate presigned GET URL for the uploaded object
-	presignResult, err := presignClient.PresignGetObject(ctx, &s3.GetObjectInput{
-		Bucket: aws.String(o.BucketName),
-		Key:    aws.String(key),
-	})
-	if err != nil {
-		return nil, fmt.Errorf("simplestorage: can't presign get for %s/%s: %v", o.BucketName, key, err)
+	result := &ListResult{
+		Items:     make([]Object, 0, len(resp.Contents)),
+		NextToken: lower(resp.NextContinuationToken, ""),
+		HasMore:   lower(resp.IsTruncated, false),
 	}
 
-	return &PutResponse{
-		Path:               key,
-		Size:               obj.Size,
-		Modified:           time.Now(),
-		ContentType:        obj.ContentType,
-		ContentDisposition: lower(o.ContentDisposition, ""),
-		URL:                presignResult.URL,
-	}, nil
+	for _, obj := range resp.Contents {
+		result.Items = append(result.Items, Object{
+			Bucket:       o.BucketName,
+			Key:          lower(obj.Key, ""),
+			Etag:         lower(obj.ETag, ""),
+			Size:         lower(obj.Size, 0),
+			LastModified: lower(obj.LastModified, time.Time{}),
+		})
+	}
+
+	if len(resp.CommonPrefixes) > 0 {
+		result.CommonPrefixes = make([]string, 0, len(resp.CommonPrefixes))
+		for _, p := range resp.CommonPrefixes {
+			if p.Prefix != nil {
+				result.CommonPrefixes = append(result.CommonPrefixes, *p.Prefix)
+			}
+		}
+	}
+
+	return result, nil
+}
+
+// PresignURL generates a presigned URL for the specified HTTP method, key, and expiry duration.
+//
+// The following HTTP methods are supported:
+//   - http.MethodGet: Generate a URL for downloading an object
+//   - http.MethodPut: Generate a URL for uploading an object
+//   - http.MethodDelete: Generate a URL for deleting an object
+//
+// For PUT operations, use WithContentType() and WithContentDisposition() to set headers.
+//
+// The expiry duration must be positive; the returned URL will only be valid for this duration.
+func (c *Client) PresignURL(ctx context.Context, method string, key string, expiry time.Duration, opts ...ClientOption) (string, error) {
+	switch method {
+	case http.MethodGet, http.MethodPut, http.MethodDelete:
+	default:
+		return "", fmt.Errorf("simplestorage: unsupported HTTP method %q for presigned URL (supported: GET, PUT, DELETE)", method)
+	}
+
+	if key == "" {
+		return "", fmt.Errorf("simplestorage: key cannot be empty for presigned URL")
+	}
+
+	if expiry <= 0 {
+		return "", fmt.Errorf("simplestorage: invalid expiry duration %v for presigned URL (must be positive)", expiry)
+	}
+
+	o := new(ClientOptions).defaults(c.options)
+	for _, doer := range opts {
+		doer(&o)
+	}
+
+	presignClient := s3.NewPresignClient(c.cli.Client)
+
+	switch method {
+	case http.MethodGet:
+		return presignURLGet(ctx, presignClient, o.BucketName, key, expiry)
+	case http.MethodPut:
+		return presignURLPut(ctx, presignClient, o.BucketName, key, expiry, o)
+	case http.MethodDelete:
+		return presignURLDelete(ctx, presignClient, o.BucketName, key, expiry)
+	}
+
+	return "", nil // unreachable
 }
 
 // generateRandomSuffix generates a random hexadecimal string of the specified length.
@@ -585,143 +658,6 @@ func tmObjectACL(a AccessType) tmtypes.ObjectCannedACL {
 	}
 }
 
-// Delete removes an object from Tigris.
-func (c *Client) Delete(ctx context.Context, key string, opts ...ClientOption) error {
-	o := new(ClientOptions).defaults(c.options)
-
-	for _, doer := range opts {
-		doer(&o)
-	}
-
-	if _, err := c.cli.DeleteObject(
-		ctx,
-		&s3.DeleteObjectInput{
-			Bucket: aws.String(o.BucketName),
-			Key:    aws.String(key),
-		},
-		o.S3Options...,
-	); err != nil {
-		return fmt.Errorf("simplestorage: can't delete %s/%s: %v", o.BucketName, key, err)
-	}
-
-	return nil
-}
-
-// List returns a list of objects matching a key prefix.
-// Returns ListResult with Items, PaginationToken, and HasMore.
-func (c *Client) List(ctx context.Context, prefix string, opts ...ClientOption) (*ListResult, error) {
-	o := new(ClientOptions).defaults(c.options)
-
-	for _, doer := range opts {
-		doer(&o)
-	}
-
-	// Use prefix from option if provided
-	listPrefix := aws.String(prefix)
-	if o.Prefix != nil {
-		listPrefix = o.Prefix
-	}
-
-	resp, err := c.cli.ListObjectsV2(
-		ctx,
-		&s3.ListObjectsV2Input{
-			Bucket:            aws.String(o.BucketName),
-			Prefix:            listPrefix,
-			Delimiter:         o.Delimiter,
-			MaxKeys:           o.MaxKeys,
-			StartAfter:        o.StartAfter,
-			ContinuationToken: o.PaginationToken,
-		},
-		o.S3Options...,
-	)
-
-	if err != nil {
-		return nil, fmt.Errorf("simplestorage: can't list %s/%s: %v", o.BucketName, prefix, err)
-	}
-
-	items := make([]Object, 0, len(resp.Contents))
-	for _, obj := range resp.Contents {
-		items = append(items, Object{
-			Bucket:       o.BucketName,
-			Key:          *obj.Key,
-			Etag:         lower(obj.ETag, ""),
-			Size:         lower(obj.Size, 0),
-			LastModified: lower(obj.LastModified, time.Time{}),
-		})
-	}
-
-	prefixes := make([]string, 0, len(resp.CommonPrefixes))
-	for _, p := range resp.CommonPrefixes {
-		if p.Prefix != nil {
-			prefixes = append(prefixes, *p.Prefix)
-		}
-	}
-
-	return &ListResult{
-		Items:           items,
-		CommonPrefixes:  prefixes,
-		PaginationToken: lower(resp.NextContinuationToken, ""),
-		HasMore:         resp.IsTruncated != nil && *resp.IsTruncated,
-	}, nil
-}
-
-// GetPresignedUrl generates a presigned URL authorizing a single operation
-// (GET or PUT) on an object.
-//
-// The operation defaults to PresignOpGet. Use WithPresignedOperation to request
-// a PUT URL, WithPresignedExpiresIn to override the one-hour default expiration,
-// and WithPresignedContentType to bind a Content-Type requirement onto a PUT URL.
-func (c *Client) GetPresignedUrl(ctx context.Context, key string, opts ...ClientOption) (*GetPresignedUrlResult, error) {
-	o := new(ClientOptions).defaults(c.options)
-
-	for _, doer := range opts {
-		doer(&o)
-	}
-
-	expiresIn := 3600 * time.Second
-	if o.PresignedExpiresIn != nil {
-		expiresIn = time.Duration(*o.PresignedExpiresIn) * time.Second
-	}
-
-	op := o.PresignedOperation
-	if op == "" {
-		op = PresignOpGet
-	}
-
-	presignClient := s3.NewPresignClient(c.cli.S3(), s3.WithPresignExpires(expiresIn))
-
-	var presignedURL string
-	switch op {
-	case PresignOpGet:
-		res, err := presignClient.PresignGetObject(ctx, &s3.GetObjectInput{
-			Bucket: aws.String(o.BucketName),
-			Key:    aws.String(key),
-		})
-		if err != nil {
-			return nil, fmt.Errorf("simplestorage: can't presign get for %s/%s: %v", o.BucketName, key, err)
-		}
-		presignedURL = res.URL
-	case PresignOpPut:
-		res, err := presignClient.PresignPutObject(ctx, &s3.PutObjectInput{
-			Bucket:      aws.String(o.BucketName),
-			Key:         aws.String(key),
-			ContentType: o.PresignedContentType,
-		})
-		if err != nil {
-			return nil, fmt.Errorf("simplestorage: can't presign put for %s/%s: %v", o.BucketName, key, err)
-		}
-		presignedURL = res.URL
-	default:
-		return nil, fmt.Errorf("simplestorage: unsupported presign operation %q (use PresignOpGet or PresignOpPut)", op)
-	}
-
-	return &GetPresignedUrlResult{
-		URL:       presignedURL,
-		ExpiresIn: int(expiresIn.Seconds()),
-		Method:    string(op),
-	}, nil
-}
-
 // lower lowers the "pointer level" of the value by returning the value pointed
 // to by p, or defaultVal if p is nil.
 func lower[T any](p *T, defaultVal T) T {
@@ -739,4 +675,52 @@ func raise[T comparable](v T) *T {
 		return nil
 	}
 	return &v
+}
+
+// presignURLGet generates a presigned URL for GET operations.
+func presignURLGet(ctx context.Context, client *s3.PresignClient, bucket, key string, expiry time.Duration) (string, error) {
+	presignResult, err := client.PresignGetObject(ctx, &s3.GetObjectInput{
+		Bucket: aws.String(bucket),
+		Key:    aws.String(key),
+	}, s3.WithPresignExpires(expiry))
+	if err != nil {
+		return "", fmt.Errorf("presign get: %w", err)
+	}
+
+	return presignResult.URL, nil
+}
+
+// presignURLPut generates a presigned URL for PUT operations.
+func presignURLPut(ctx context.Context, client *s3.PresignClient, bucket, key string, expiry time.Duration, opts ClientOptions) (string, error) {
+	input := &s3.PutObjectInput{
+		Bucket: aws.String(bucket),
+		Key:    aws.String(key),
+	}
+
+	if opts.ContentType != nil {
+		input.ContentType = opts.ContentType
+	}
+	if opts.ContentDisposition != nil {
+		input.ContentDisposition = opts.ContentDisposition
+	}
+
+	presignResult, err := client.PresignPutObject(ctx, input, s3.WithPresignExpires(expiry))
+	if err != nil {
+		return "", fmt.Errorf("presign put: %w", err)
+	}
+
+	return presignResult.URL, nil
+}
+
+// presignURLDelete generates a presigned URL for DELETE operations.
+func presignURLDelete(ctx context.Context, client *s3.PresignClient, bucket, key string, expiry time.Duration) (string, error) {
+	presignResult, err := client.PresignDeleteObject(ctx, &s3.DeleteObjectInput{
+		Bucket: aws.String(bucket),
+		Key:    aws.String(key),
+	}, s3.WithPresignExpires(expiry))
+	if err != nil {
+		return "", fmt.Errorf("presign delete: %w", err)
+	}
+
+	return presignResult.URL, nil
 }

@@ -21,13 +21,12 @@ func ExampleClient_Head() {
 		log.Fatal(err)
 	}
 
-	// Fetch metadata without downloading the body.
 	info, err := client.Head(ctx, "reports/q1.pdf")
 	if err != nil {
 		log.Fatal(err) // handle the error here
 	}
 
-	fmt.Printf("size=%d type=%s url=%s\n", info.Size, info.ContentType, info.URL)
+	fmt.Printf("size=%d type=%s\n", info.Size, info.ContentType)
 }
 
 func ExampleClient_Head_snapshotVersion() {
@@ -40,7 +39,6 @@ func ExampleClient_Head_snapshotVersion() {
 		log.Fatal(err)
 	}
 
-	// Read metadata from a specific snapshot version.
 	info, err := client.Head(ctx, "reports/q1.pdf",
 		simplestorage.WithQuerySnapshotVersion("2024-01-01T00:00:00Z"),
 	)
@@ -87,7 +85,7 @@ func ExampleClient_Put_publicAccess() {
 	}
 
 	body := strings.NewReader("hello world")
-	resp, err := client.Put(ctx, &simplestorage.Object{
+	obj, err := client.Put(ctx, &simplestorage.Object{
 		Key:         "public/greeting.txt",
 		ContentType: "text/plain",
 		Size:        int64(body.Len()),
@@ -99,7 +97,7 @@ func ExampleClient_Put_publicAccess() {
 		log.Fatal(err) // handle the error here
 	}
 
-	fmt.Println(resp.URL)
+	fmt.Println(obj.Etag)
 }
 
 func ExampleClient_Put_randomSuffix() {
@@ -115,7 +113,7 @@ func ExampleClient_Put_randomSuffix() {
 	body := strings.NewReader("payload")
 	// The stored key ends up like "uploads/image.png-<random>" so concurrent
 	// uploads with the same base name don't collide.
-	resp, err := client.Put(ctx, &simplestorage.Object{
+	obj, err := client.Put(ctx, &simplestorage.Object{
 		Key:  "uploads/image.png",
 		Body: io.NopCloser(body),
 		Size: int64(body.Len()),
@@ -126,7 +124,7 @@ func ExampleClient_Put_randomSuffix() {
 		log.Fatal(err) // handle the error here
 	}
 
-	fmt.Println(resp.Path)
+	fmt.Println(obj.Key)
 }
 
 func ExampleClient_Put_noOverwrite() {
@@ -188,7 +186,8 @@ func ExampleClient_List_delimiter() {
 	}
 
 	// Walk one "directory" level under prefix "reports/" using "/" as a delimiter.
-	result, err := client.List(ctx, "reports/",
+	result, err := client.List(ctx,
+		simplestorage.WithPrefix("reports/"),
 		simplestorage.WithDelimiter("/"),
 	)
 	if err != nil {
@@ -201,51 +200,6 @@ func ExampleClient_List_delimiter() {
 	for _, o := range result.Items {
 		fmt.Println("object:", o.Key)
 	}
-}
-
-func ExampleClient_GetPresignedUrl() {
-	ctx := context.Background()
-
-	client, err := simplestorage.New(ctx,
-		simplestorage.WithBucket("my-bucket"),
-	)
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	// Signed GET URL, valid for 15 minutes.
-	res, err := client.GetPresignedUrl(ctx, "reports/q1.pdf",
-		simplestorage.WithPresignedExpiresIn(15*60),
-	)
-	if err != nil {
-		log.Fatal(err) // handle the error here
-	}
-
-	fmt.Println(res.URL)
-}
-
-func ExampleClient_GetPresignedUrl_put() {
-	ctx := context.Background()
-
-	client, err := simplestorage.New(ctx,
-		simplestorage.WithBucket("my-bucket"),
-	)
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	// Signed PUT URL that clients can upload to directly with an explicit
-	// Content-Type requirement.
-	res, err := client.GetPresignedUrl(ctx, "uploads/incoming.bin",
-		simplestorage.WithPresignedOperation(simplestorage.PresignOpPut),
-		simplestorage.WithPresignedContentType("application/octet-stream"),
-		simplestorage.WithPresignedExpiresIn(5*60),
-	)
-	if err != nil {
-		log.Fatal(err) // handle the error here
-	}
-
-	fmt.Println(res.URL)
 }
 
 func ExampleWithBucketAccess() {
