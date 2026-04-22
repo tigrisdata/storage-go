@@ -75,14 +75,15 @@ func (c *Client) CreateBucket(ctx context.Context, bucket string, opts ...Bucket
 	// Use CreateBucket if no snapshot options, otherwise use Tigris-specific method
 	var err error
 
+	input := &s3.CreateBucketInput{
+		Bucket: aws.String(bucket),
+		ACL:    bucketACL(o.Access),
+	}
+
 	if o.EnableSnapshot {
-		_, err = c.cli.CreateSnapshotEnabledBucket(ctx, &s3.CreateBucketInput{
-			Bucket: aws.String(bucket),
-		}, o.S3Options...)
+		_, err = c.cli.CreateSnapshotEnabledBucket(ctx, input, o.S3Options...)
 	} else {
-		_, err = c.cli.CreateBucket(ctx, &s3.CreateBucketInput{
-			Bucket: aws.String(bucket),
-		}, o.S3Options...)
+		_, err = c.cli.CreateBucket(ctx, input, o.S3Options...)
 	}
 
 	if err != nil {
@@ -224,8 +225,7 @@ func (c *Client) CreateBucketSnapshot(ctx context.Context, bucket, description s
 		doer(&o)
 	}
 
-	// CreateBucketSnapshot uses CreateBucket with snapshot header
-	_, err := c.cli.CreateBucketSnapshot(ctx, description, &s3.CreateBucketInput{
+	resp, err := c.cli.CreateBucketSnapshot(ctx, description, &s3.CreateBucketInput{
 		Bucket: aws.String(bucket),
 	}, o.S3Options...)
 
@@ -233,17 +233,20 @@ func (c *Client) CreateBucketSnapshot(ctx context.Context, bucket, description s
 		return nil, fmt.Errorf("simplestorage: can't create snapshot for bucket %s: %w", bucket, err)
 	}
 
-	// Note: The snapshot version is returned in HTTP headers that are not directly
-	// accessible through the AWS SDK response. Users can list snapshots to get the version.
 	return &SnapshotInfo{
 		Name:    description,
-		Version: "",
+		Version: resp.SnapshotVersion,
 		Created: time.Now(),
 		Bucket:  bucket,
 	}, nil
 }
 
 // ListBucketSnapshots lists all snapshots for the given bucket.
+//
+// Tigris returns each snapshot as a pseudo-bucket entry whose Name is the
+// snapshot version identifier. The user-provided description is not returned
+// by the ListBuckets API, so SnapshotInfo.Name is left empty; use the version
+// from CreateBucketSnapshot's response if you need to correlate descriptions.
 func (c *Client) ListBucketSnapshots(ctx context.Context, bucket string, opts ...BucketOption) (*SnapshotList, error) {
 	if bucket == "" {
 		return nil, ErrBucketNameRequired
@@ -254,35 +257,22 @@ func (c *Client) ListBucketSnapshots(ctx context.Context, bucket string, opts ..
 		doer(&o)
 	}
 
-	// Use the new tigrisheaders helper
-	o.S3Options = append(o.S3Options, tigrisheaders.WithListSnapshots(bucket))
-
-	resp, err := c.cli.ListBuckets(ctx, &s3.ListBucketsInput{}, o.S3Options...)
-
+	resp, err := c.cli.ListBucketSnapshots(ctx, bucket, o.S3Options...)
 	if err != nil {
 		return nil, fmt.Errorf("simplestorage: can't list snapshots for bucket %s: %w", bucket, err)
 	}
 
 	result := &SnapshotList{
 		Bucket:    bucket,
-		Snapshots: make([]SnapshotInfo, 0),
+		Snapshots: make([]SnapshotInfo, 0, len(resp.Buckets)),
 	}
 
-	// Parse snapshot info from response buckets
 	for _, b := range resp.Buckets {
-		// Extract snapshot info from bucket metadata.
-		// NOTE: The ListBuckets response does not expose a separate snapshot version field
-		// in the bucket structure, so Version is set to the bucket name. The actual
-		// snapshot version ID is returned in HTTP headers that are not directly
-		// accessible through the AWS SDK response. Use CreateBucketSnapshot for
-		// snapshot creation where the version is returned separately.
-		snap := SnapshotInfo{
-			Name:    lower(b.Name, ""),
+		result.Snapshots = append(result.Snapshots, SnapshotInfo{
 			Version: lower(b.Name, ""),
 			Created: lower(b.CreationDate, time.Time{}),
 			Bucket:  bucket,
-		}
-		result.Snapshots = append(result.Snapshots, snap)
+		})
 	}
 
 	return result, nil

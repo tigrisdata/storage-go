@@ -2,6 +2,7 @@ package simplestorage
 
 import (
 	"github.com/aws/aws-sdk-go-v2/service/s3"
+	s3types "github.com/aws/aws-sdk-go-v2/service/s3/types"
 	"github.com/tigrisdata/storage-go/tigrisheaders"
 )
 
@@ -16,11 +17,23 @@ type BucketOptions struct {
 	// SnapshotVersion specifies a snapshot version to target (for forking from specific snapshot).
 	SnapshotVersion string
 
+	// SourceBucketSnapshot specifies the snapshot version to fork from.
+	SourceBucketSnapshot string
+
 	// Region sets static replication region for the bucket.
 	// This field is stored for visibility but the actual behavior is configured
 	// via S3Options (see WithBucketRegion). Keeping the field enables debugging
 	// and potential future use in bucket info responses.
 	Region string
+
+	// DefaultTier sets the storage class tier for the bucket.
+	DefaultTier string
+
+	// Consistency sets the consistency level for the bucket ("strict" or "default").
+	Consistency string
+
+	// Access sets the bucket-level access type (public or private).
+	Access AccessType
 
 	// MaxKeys sets the maximum number of results to return in ListBuckets.
 	MaxKeys *int32
@@ -82,5 +95,53 @@ func WithListLimit(limit int32) BucketOption {
 func WithListToken(token string) BucketOption {
 	return func(o *BucketOptions) {
 		o.ContinuationToken = &token
+	}
+}
+
+// WithDefaultTier sets the storage class tier for the bucket.
+// Valid values: "STANDARD", "STANDARD_IA", "GLACIER", "GLACIER_IR"
+func WithDefaultTier(tier string) BucketOption {
+	return func(o *BucketOptions) {
+		o.DefaultTier = tier
+		o.S3Options = append(o.S3Options, tigrisheaders.WithStorageClass(tier))
+	}
+}
+
+// WithConsistentRead enables consistent read mode for the bucket.
+func WithConsistentRead() BucketOption {
+	return func(o *BucketOptions) {
+		o.Consistency = "strict"
+		o.S3Options = append(o.S3Options, tigrisheaders.WithConsistentRead())
+	}
+}
+
+// WithForkSourceSnapshot specifies the snapshot version when forking from a bucket.
+// Use this with CreateBucket when forking from a specific snapshot version.
+func WithForkSourceSnapshot(snapshot string) BucketOption {
+	return func(o *BucketOptions) {
+		o.SourceBucketSnapshot = snapshot
+		o.S3Options = append(o.S3Options, tigrisheaders.WithForkSourceBucketSnapshot(snapshot))
+	}
+}
+
+// WithBucketAccess sets the bucket-level canned ACL (public or private).
+// Use AccessPublic to allow anonymous reads via public-read, or AccessPrivate
+// (the default) to require authenticated access.
+func WithBucketAccess(access AccessType) BucketOption {
+	return func(o *BucketOptions) {
+		o.Access = access
+	}
+}
+
+// bucketACL maps an AccessType to an S3 canned ACL for bucket operations.
+// Returns an empty ACL when access is unset so the account default applies.
+func bucketACL(a AccessType) s3types.BucketCannedACL {
+	switch a {
+	case AccessPublic:
+		return s3types.BucketCannedACLPublicRead
+	case AccessPrivate:
+		return s3types.BucketCannedACLPrivate
+	default:
+		return ""
 	}
 }

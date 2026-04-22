@@ -293,6 +293,33 @@ func TestBucketOptions(t *testing.T) {
 				}
 			},
 		},
+		{
+			name:   "WithDefaultTier sets DefaultTier",
+			option: WithDefaultTier("STANDARD_IA"),
+			verify: func(t *testing.T, o *BucketOptions) {
+				if o.DefaultTier != "STANDARD_IA" {
+					t.Errorf("WithDefaultTier() set DefaultTier = %v, want %v", o.DefaultTier, "STANDARD_IA")
+				}
+			},
+		},
+		{
+			name:   "WithConsistentRead sets Consistency",
+			option: WithConsistentRead(),
+			verify: func(t *testing.T, o *BucketOptions) {
+				if o.Consistency != "strict" {
+					t.Errorf("WithConsistentRead() set Consistency = %v, want %v", o.Consistency, "strict")
+				}
+			},
+		},
+		{
+			name:   "WithForkSourceSnapshot sets SourceBucketSnapshot",
+			option: WithForkSourceSnapshot("snapshot-123"),
+			verify: func(t *testing.T, o *BucketOptions) {
+				if o.SourceBucketSnapshot != "snapshot-123" {
+					t.Errorf("WithForkSourceSnapshot() set SourceBucketSnapshot = %v, want %v", o.SourceBucketSnapshot, "snapshot-123")
+				}
+			},
+		},
 	}
 
 	for _, tt := range tests {
