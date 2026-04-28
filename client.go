@@ -16,6 +16,11 @@ type Client struct {
 	*s3.Client
 }
 
+// S3 returns the underlying S3 client.
+func (c *Client) S3() *s3.Client {
+	return c.Client
+}
+
 // CreateBucketFork creates a fork of the source bucket named target.
 //
 // If you want to specify an exact snapshot version to fork from, use tigrisheaders.WithSnapshotVersion.
@@ -27,11 +32,32 @@ func (c *Client) CreateBucketFork(ctx context.Context, source, target string, op
 	}, opts...)
 }
 
+// CreateBucketSnapshotOutput is the response from CreateBucketSnapshot.
+// It wraps the underlying s3.CreateBucketOutput and surfaces the snapshot
+// version that Tigris returns in the X-Tigris-Snapshot-Version response header.
+type CreateBucketSnapshotOutput struct {
+	*s3.CreateBucketOutput
+
+	// SnapshotVersion is the version identifier of the snapshot just created.
+	// Empty if the server did not return a version header.
+	SnapshotVersion string
+}
+
 // CreateBucketSnapshot creates a snapshot with the given description for a bucket.
-func (c *Client) CreateBucketSnapshot(ctx context.Context, description string, in *s3.CreateBucketInput, opts ...func(*s3.Options)) (*s3.CreateBucketOutput, error) {
+// The returned output carries the snapshot version in SnapshotVersion.
+func (c *Client) CreateBucketSnapshot(ctx context.Context, description string, in *s3.CreateBucketInput, opts ...func(*s3.Options)) (*CreateBucketSnapshotOutput, error) {
 	opts = append(opts, tigrisheaders.WithTakeSnapshot(description))
 
-	return c.Client.CreateBucket(ctx, in, opts...)
+	resp, err := c.Client.CreateBucket(ctx, in, opts...)
+	if err != nil {
+		return nil, err
+	}
+
+	out := &CreateBucketSnapshotOutput{CreateBucketOutput: resp}
+	if rawResp, ok := middleware.GetRawResponse(resp.ResultMetadata).(*http.Response); ok {
+		out.SnapshotVersion = rawResp.Header.Get("X-Tigris-Snapshot-Version")
+	}
+	return out, nil
 }
 
 // CreateSnapshotEnabledBucket creates a new bucket with the ability to take snapshots and fork the contents of it.

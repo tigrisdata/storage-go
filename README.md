@@ -84,6 +84,7 @@ output, err := client.CreateSnapshotEnabledBucket(ctx, &s3.CreateBucketInput{
 output, err := client.CreateBucketSnapshot(ctx, "Initial backup", &s3.CreateBucketInput{
     Bucket: aws.String("my-bucket"),
 })
+// output.SnapshotVersion holds the version returned by Tigris.
 ```
 
 #### Fork a Bucket

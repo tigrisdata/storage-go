@@ -121,6 +121,22 @@ func WithEnableSnapshot() func(*s3.Options) {
 	return WithHeader("X-Tigris-Enable-Snapshot", "true")
 }
 
+// WithStorageClass sets the storage class tier for buckets or objects.
+// Valid values: "STANDARD", "STANDARD_IA", "GLACIER", "GLACIER_IR"
+func WithStorageClass(storageClass string) func(*s3.Options) {
+	return WithHeader("X-Tigris-Storage-Class", storageClass)
+}
+
+// WithConsistentRead enables consistent read mode.
+func WithConsistentRead() func(*s3.Options) {
+	return WithHeader("X-Tigris-Consistent", "true")
+}
+
+// WithForkSourceBucketSnapshot specifies the snapshot version when forking from a bucket.
+func WithForkSourceBucketSnapshot(snapshot string) func(*s3.Options) {
+	return WithHeader("X-Tigris-Fork-Source-Bucket-Snapshot", snapshot)
+}
+
 // WithTakeSnapshot tells Tigris to create a snapshot with the given description on a forkable bucket.
 //
 // See the Tigris documentation[1] for more information.
@@ -169,4 +185,3 @@ func WithRename() func(*s3.Options) {
 		options.APIOptions = append(options.APIOptions, http.AddHeaderValue("X-Tigris-Rename", "true"))
 	}
 }
-
