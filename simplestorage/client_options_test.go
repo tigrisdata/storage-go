@@ -172,3 +172,10 @@ func TestBucketOption_WithBucketAccess(t *testing.T) {
 		t.Errorf("Access = %v, want %v", o.Access, AccessPublic)
 	}
 }
+
+func TestBucketOptionsDefaultsAccessIsPrivate(t *testing.T) {
+	o := new(BucketOptions).defaults()
+	if o.Access != AccessPrivate {
+		t.Errorf("default Access = %q, want %q", o.Access, AccessPrivate)
+	}
+}

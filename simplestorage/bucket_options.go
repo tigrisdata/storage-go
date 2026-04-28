@@ -49,6 +49,7 @@ type BucketOptions struct {
 func (BucketOptions) defaults() BucketOptions {
 	return BucketOptions{
 		EnableSnapshot:    false,
+		Access:            AccessPrivate,
 		MaxKeys:           nil,
 		ContinuationToken: nil,
 		S3Options:         []func(*s3.Options){},
@@ -134,14 +135,13 @@ func WithBucketAccess(access AccessType) BucketOption {
 }
 
 // bucketACL maps an AccessType to an S3 canned ACL for bucket operations.
-// Returns an empty ACL when access is unset so the account default applies.
+// Defaults to private for unset values so callers don't accidentally inherit
+// a permissive account-wide default.
 func bucketACL(a AccessType) s3types.BucketCannedACL {
 	switch a {
 	case AccessPublic:
 		return s3types.BucketCannedACLPublicRead
-	case AccessPrivate:
-		return s3types.BucketCannedACLPrivate
 	default:
-		return ""
+		return s3types.BucketCannedACLPrivate
 	}
 }
