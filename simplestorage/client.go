@@ -401,7 +401,11 @@ func (c *Client) Put(ctx context.Context, obj *Object, opts ...ClientOption) (*O
 
 	key := obj.Key
 	if o.RandomSuffix {
-		key = fmt.Sprintf("%s-%s", key, generateRandomSuffix(12))
+		suffix, err := generateRandomSuffix(12)
+		if err != nil {
+			return nil, fmt.Errorf("simplestorage: can't generate random suffix for %s/%s: %w", o.BucketName, key, err)
+		}
+		key = fmt.Sprintf("%s-%s", key, suffix)
 	}
 
 	// Disallow overwrites server-side using If-Match: "" so the check is atomic.
@@ -595,10 +599,14 @@ func (c *Client) PresignURL(ctx context.Context, method string, key string, expi
 }
 
 // generateRandomSuffix generates a random hexadecimal string of the specified length.
-func generateRandomSuffix(length int) string {
-	b := make([]byte, length/2)
-	rand.Read(b)
-	return hex.EncodeToString(b)[:length]
+// Uses (length+1)/2 random bytes so odd lengths still produce a hex string at
+// least length characters long before truncation.
+func generateRandomSuffix(length int) (string, error) {
+	b := make([]byte, (length+1)/2)
+	if _, err := rand.Read(b); err != nil {
+		return "", fmt.Errorf("read random bytes: %w", err)
+	}
+	return hex.EncodeToString(b)[:length], nil
 }
 
 // progressReader wraps an io.Reader to invoke a callback with cumulative
