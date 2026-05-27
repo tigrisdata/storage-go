@@ -3,7 +3,9 @@ package simplestorage
 import (
 	"context"
 	"errors"
+	"io"
 	"os"
+	"strings"
 	"testing"
 
 	_ "github.com/joho/godotenv/autoload"
@@ -190,5 +192,48 @@ func TestClient_For(t *testing.T) {
 				t.Errorf("For() SecretAccessKey = %q, want %q", newClient.options.SecretAccessKey, original.options.SecretAccessKey)
 			}
 		})
+	}
+}
+
+func TestClientList(t *testing.T) {
+	skipIfNoCreds(t)
+	ctx := t.Context()
+
+	client, err := New(ctx, WithBucket("xxx-foo-test"))
+	if err != nil {
+		t.Fatalf("New() failed: %v", err)
+	}
+
+	bucket := setupTestBucket(t, ctx, client)
+	client = client.For(bucket)
+
+	key := t.Name()
+	body := "hello, world!\n"
+
+	if _, err := client.Put(ctx, &Object{
+		Key:  key,
+		Size: int64(len(body)),
+		Body: io.NopCloser(strings.NewReader(body)),
+	}); err != nil {
+		t.Fatalf("Put failed: %v", err)
+	}
+
+	objs, err := collect(client.List(ctx))
+	if err != nil {
+		t.Fatalf("can't list objects in bucket: %v", err)
+	}
+
+	if len(objs) != 1 {
+		t.Errorf("wanted len(objs) == 1 but got: %d", len(objs))
+	}
+
+	gotObj := objs[0]
+
+	if gotObj.Key != key {
+		t.Errorf("wanted key %q, got: %q", key, gotObj.Key)
+	}
+
+	if gotObj.Size != int64(len(body)) {
+		t.Errorf("wanted size %d, got: %d", len(body), gotObj.Size)
 	}
 }

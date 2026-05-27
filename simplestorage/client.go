@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"iter"
 	"net/http"
 	"time"
 
@@ -496,13 +497,65 @@ func (c *Client) Delete(ctx context.Context, key string, opts ...ClientOption) e
 	return nil
 }
 
+func (c *Client) List(ctx context.Context, opts ...ClientOption) iter.Seq2[*Object, error] {
+	o := new(ClientOptions).defaults(c.options)
+
+	for _, doer := range opts {
+		doer(&o)
+	}
+
+	return func(yield func(obj *Object, err error) bool) {
+		var continueToken *string
+		for {
+			resp, err := c.cli.ListObjectsV2(
+				ctx,
+				&s3.ListObjectsV2Input{
+					Bucket:            new(o.BucketName),
+					Delimiter:         o.Delimiter,
+					Prefix:            o.Prefix,
+					MaxKeys:           o.MaxKeys,
+					ContinuationToken: continueToken,
+					StartAfter:        o.StartAfter,
+				},
+				o.S3Options...,
+			)
+
+			if err != nil {
+				yield(nil, err)
+				return
+			}
+
+			for _, obj := range resp.Contents {
+				if !yield(
+					&Object{
+						Bucket:       o.BucketName,
+						Key:          lower(obj.Key, ""),
+						Etag:         lower(obj.ETag, ""),
+						Size:         lower(obj.Size, 0),
+						LastModified: lower(obj.LastModified, time.Time{}),
+					},
+					nil,
+				) {
+					return
+				}
+			}
+
+			// An empty or absent continuation token means there are no more pages.
+			if resp.ContinuationToken == nil || *resp.ContinuationToken == "" {
+				return
+			}
+			continueToken = resp.ContinuationToken
+		}
+	}
+}
+
 // List returns a list of objects matching the given criteria.
 //
 // The returned ListResult contains pagination information; use NextToken with
 // WithPaginationToken() to fetch the next page. HasMore indicates whether
 // additional objects are available. When WithDelimiter is set, CommonPrefixes
 // is populated with the grouped prefixes (for directory-like listings).
-func (c *Client) List(ctx context.Context, opts ...ClientOption) (*ListResult, error) {
+func (c *Client) ListOld(ctx context.Context, opts ...ClientOption) (*ListResult, error) {
 	o := new(ClientOptions).defaults(c.options)
 
 	for _, doer := range opts {
