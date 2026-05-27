@@ -3,11 +3,11 @@ package storage
 import (
 	"context"
 	"fmt"
-	"net/http"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/aws/middleware"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
+	smithyhttp "github.com/aws/smithy-go/transport/http"
 	"github.com/tigrisdata/storage-go/tigrisheaders"
 )
 
@@ -54,7 +54,7 @@ func (c *Client) CreateBucketSnapshot(ctx context.Context, description string, i
 	}
 
 	out := &CreateBucketSnapshotOutput{CreateBucketOutput: resp}
-	if rawResp, ok := middleware.GetRawResponse(resp.ResultMetadata).(*http.Response); ok {
+	if rawResp, ok := middleware.GetRawResponse(resp.ResultMetadata).(*smithyhttp.Response); ok {
 		out.SnapshotVersion = rawResp.Header.Get("X-Tigris-Snapshot-Version")
 	}
 	return out, nil
@@ -86,7 +86,7 @@ func (c *Client) HeadBucketForkOrSnapshot(ctx context.Context, in *s3.HeadBucket
 		return nil, err
 	}
 
-	rawResp, ok := middleware.GetRawResponse(resp.ResultMetadata).(*http.Response)
+	rawResp, ok := middleware.GetRawResponse(resp.ResultMetadata).(*smithyhttp.Response)
 	if !ok {
 		return nil, fmt.Errorf("unexpected response type from middleware")
 	}
