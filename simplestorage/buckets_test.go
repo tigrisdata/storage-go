@@ -10,6 +10,7 @@ import (
 	"time"
 
 	_ "github.com/joho/godotenv/autoload"
+	"github.com/tigrisdata/storage-go/tigrisheaders"
 )
 
 // skipIfNoCreds skips the test if Tigris credentials are not set.
@@ -35,7 +36,9 @@ func setupTestBucket(t *testing.T, ctx context.Context, client *Client) string {
 	}
 
 	t.Cleanup(func() {
-		err := client.DeleteBucket(context.Background(), bucket)
+		err := client.DeleteBucket(context.Background(), bucket, func(bo *BucketOptions) {
+			bo.S3Options = append(bo.S3Options, tigrisheaders.WithHeader("Tigris-Force-Delete", "true"))
+		})
 		if err != nil {
 			t.Logf("cleanupTestBucket: failed to delete bucket %s: %v", bucket, err)
 		}
@@ -478,13 +481,18 @@ func TestBucketSnapshotList(t *testing.T) {
 
 func collect[T any](i iter.Seq2[T, error]) ([]T, error) {
 	var result []T
+	var errs []error
 
 	for item, err := range i {
 		if err != nil {
-			return nil, err
+			errs = append(errs, err)
 		}
 
 		result = append(result, item)
+	}
+
+	if len(errs) != 0 {
+		return nil, errors.Join(errs...)
 	}
 
 	return result, nil
