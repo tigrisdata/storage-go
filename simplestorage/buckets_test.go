@@ -28,21 +28,19 @@ func setupTestBucket(t *testing.T, ctx context.Context, client *Client) string {
 	skipIfNoCreds(t)
 
 	bucket := fmt.Sprintf("test-bucket-%d", time.Now().UnixNano())
-	_, err := client.CreateBucket(ctx, bucket)
+	_, err := client.CreateBucket(ctx, bucket, WithEnableSnapshot())
 	if err != nil {
 		t.Fatalf("setupTestBucket: failed to create bucket %s: %v", bucket, err)
 	}
-	return bucket
-}
 
-// cleanupTestBucket deletes a bucket after testing.
-// Logs errors instead of failing, to avoid masking test failures.
-func cleanupTestBucket(t *testing.T, ctx context.Context, client *Client, bucket string) {
-	t.Helper()
-	err := client.DeleteBucket(ctx, bucket)
-	if err != nil {
-		t.Logf("cleanupTestBucket: failed to delete bucket %s: %v", bucket, err)
-	}
+	t.Cleanup(func() {
+		err := client.DeleteBucket(context.Background(), bucket)
+		if err != nil {
+			t.Logf("cleanupTestBucket: failed to delete bucket %s: %v", bucket, err)
+		}
+	})
+
+	return bucket
 }
 
 func TestCreateBucket(t *testing.T) {
@@ -75,12 +73,9 @@ func TestCreateBucket(t *testing.T) {
 			}
 			defer cleanup()
 
-			// Create a client (use a dummy bucket for object operations)
-			os.Setenv("TIGRIS_STORAGE_BUCKET", "dummy-bucket")
-			defer os.Unsetenv("TIGRIS_STORAGE_BUCKET")
-
 			client, err := New(context.Background(),
 				WithEndpoint("https://test.endpoint.dev"),
+				WithBucket("xxx-dummy-bucket"),
 			)
 			if err != nil {
 				t.Fatalf("New() failed: %v", err)
@@ -131,12 +126,9 @@ func TestDeleteBucket(t *testing.T) {
 			}
 			defer cleanup()
 
-			// Create a client
-			os.Setenv("TIGRIS_STORAGE_BUCKET", "dummy-bucket")
-			defer os.Unsetenv("TIGRIS_STORAGE_BUCKET")
-
 			client, err := New(context.Background(),
 				WithEndpoint("https://test.endpoint.dev"),
+				WithBucket("xxx-dummy-bucket"),
 			)
 			if err != nil {
 				t.Fatalf("New() failed: %v", err)
@@ -182,12 +174,9 @@ func TestListBuckets(t *testing.T) {
 			cleanup := tt.setupEnv
 			defer cleanup()
 
-			// Create a client
-			os.Setenv("TIGRIS_STORAGE_BUCKET", "dummy-bucket")
-			defer os.Unsetenv("TIGRIS_STORAGE_BUCKET")
-
 			client, err := New(context.Background(),
 				WithEndpoint("https://test.endpoint.dev"),
+				WithBucket("xxx-dummy-bucket"),
 			)
 			if err != nil {
 				t.Fatalf("New() failed: %v", err)
@@ -466,7 +455,6 @@ func TestBucketLifecycle_integration(t *testing.T) {
 
 	// Use setupTestBucket to verify the helper works
 	bucket := setupTestBucket(t, ctx, client)
-	defer cleanupTestBucket(t, ctx, client, bucket)
 
 	// Verify bucket was created
 	info, err := client.GetBucketInfo(ctx, bucket)
