@@ -1,6 +1,6 @@
 module github.com/tigrisdata/storage-go
 
-go 1.25.5
+go 1.26
 
 require (
 	github.com/aws/aws-sdk-go-v2 v1.41.6
