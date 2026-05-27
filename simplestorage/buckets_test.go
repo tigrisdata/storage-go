@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"iter"
 	"os"
 	"testing"
 	"time"
@@ -182,9 +183,15 @@ func TestListBuckets(t *testing.T) {
 				t.Fatalf("New() failed: %v", err)
 			}
 
-			_, err = client.ListBuckets(context.Background())
+			var iterErr error
+			for _, err := range client.Buckets(context.Background()) {
+				if err != nil {
+					iterErr = err
+					break
+				}
+			}
 
-			if tt.wantErr && err == nil {
+			if tt.wantErr && iterErr == nil {
 				t.Errorf("ListBuckets() expected error, got nil")
 			}
 		})
@@ -361,41 +368,6 @@ func TestCreateBucketSnapshot(t *testing.T) {
 	}
 }
 
-func TestListBucketSnapshots(t *testing.T) {
-	tests := []struct {
-		name    string
-		bucket  string
-		wantErr bool
-	}{
-		{
-			name:    "empty bucket name returns error",
-			bucket:  "",
-			wantErr: true,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			// Create a client
-			os.Setenv("TIGRIS_STORAGE_BUCKET", "dummy-bucket")
-			defer os.Unsetenv("TIGRIS_STORAGE_BUCKET")
-
-			client, err := New(context.Background(),
-				WithEndpoint("https://test.endpoint.dev"),
-			)
-			if err != nil {
-				t.Fatalf("New() failed: %v", err)
-			}
-
-			_, err = client.ListBucketSnapshots(context.Background(), tt.bucket)
-
-			if tt.wantErr && err == nil {
-				t.Errorf("ListBucketSnapshots() expected error, got nil")
-			}
-		})
-	}
-}
-
 func TestForkBucket(t *testing.T) {
 	tests := []struct {
 		name    string
@@ -464,4 +436,56 @@ func TestBucketLifecycle_integration(t *testing.T) {
 	if info.Name != bucket {
 		t.Errorf("GetBucketInfo() returned bucket name %s, want %s", info.Name, bucket)
 	}
+}
+
+func TestBucketSnapshotList(t *testing.T) {
+	skipIfNoCreds(t)
+	ctx := t.Context()
+
+	client, err := New(ctx, WithBucket("xxx-foo-test"))
+	if err != nil {
+		t.Fatalf("New() failed: %v", err)
+	}
+
+	bucket := setupTestBucket(t, ctx, client)
+	client = client.For(bucket)
+
+	snapshotName := t.Name()
+	sn, err := client.CreateBucketSnapshot(ctx, bucket, snapshotName)
+	if err != nil {
+		t.Fatalf("CreateBucketSnapshot(%q, %q) failed: %v", bucket, snapshotName, err)
+	}
+
+	snaps, err := collect(client.Snapshots(ctx, bucket))
+	if err != nil {
+		t.Fatalf("ListBucketSnapshots(%q) failed: %v", bucket, err)
+	}
+
+	if len(snaps) != 1 {
+		t.Errorf("wanted len(snaps) == 1 but got: %d", len(snaps))
+	}
+
+	gotSN := snaps[0]
+
+	if gotSN.Version != sn.Version {
+		t.Errorf("wanted snapshot version %s but got: %s", sn.Version, gotSN.Version)
+	}
+
+	if gotSN.Name != sn.Name {
+		t.Errorf("wanted snapshot name %q but got: %q", sn.Name, gotSN.Name)
+	}
+}
+
+func collect[T any](i iter.Seq2[T, error]) ([]T, error) {
+	var result []T
+
+	for item, err := range i {
+		if err != nil {
+			return nil, err
+		}
+
+		result = append(result, item)
+	}
+
+	return result, nil
 }
