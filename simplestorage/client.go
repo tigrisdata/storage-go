@@ -265,14 +265,6 @@ type Object struct {
 	Body               io.ReadCloser     // Body of the object so it can be read, don't forget to close it.
 }
 
-// ListResult contains the result of a List operation, including pagination information.
-type ListResult struct {
-	Items          []Object // List of objects
-	CommonPrefixes []string // Common prefixes grouped by delimiter (populated when WithDelimiter is set)
-	NextToken      string   // Pagination token for the next page
-	HasMore        bool     // Whether there are more objects to list
-}
-
 // Get fetches the contents of an object and its metadata from Tigris.
 func (c *Client) Get(ctx context.Context, key string, opts ...ClientOption) (*Object, error) {
 	o := new(ClientOptions).defaults(c.options)

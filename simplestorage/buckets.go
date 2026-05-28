@@ -39,25 +39,12 @@ type BucketInfo struct {
 	SourceSnapshot   string // If this is a fork, the snapshot version
 }
 
-// BucketList contains a paginated list of buckets.
-type BucketList struct {
-	Buckets   []BucketInfo // List of buckets
-	NextToken string       // Pagination token for next page
-	Truncated bool         // True if more results available
-}
-
 // SnapshotInfo contains metadata about a bucket snapshot.
 type SnapshotInfo struct {
 	Name    string    // Snapshot name/description
 	Version string    // Snapshot version ID
 	Created time.Time // Creation time
 	Bucket  string    // Source bucket name
-}
-
-// SnapshotList contains a list of snapshots for a bucket.
-type SnapshotList struct {
-	Snapshots []SnapshotInfo // List of snapshots
-	Bucket    string         // Source bucket name
 }
 
 // CreateBucket creates a new bucket with the given name.
