@@ -540,11 +540,11 @@ func (c *Client) List(ctx context.Context, opts ...ClientOption) iter.Seq2[*Obje
 				}
 			}
 
-			// An empty or absent continuation token means there are no more pages.
-			if resp.ContinuationToken == nil || *resp.ContinuationToken == "" {
+			// If the response is not truncated, there are more results to be returned.
+			if !*resp.IsTruncated {
 				return
 			}
-			continueToken = resp.ContinuationToken
+			continueToken = resp.NextContinuationToken
 		}
 	}
 }
