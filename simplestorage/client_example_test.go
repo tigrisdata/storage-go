@@ -191,7 +191,7 @@ func ExampleClient_List_delimiter() {
 			log.Fatal(err) // handle error
 		}
 
-		fmt.Println("object:", obj)
+		fmt.Println("object:", obj.Key)
 	}
 }
 
