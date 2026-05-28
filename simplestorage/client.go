@@ -497,6 +497,10 @@ func (c *Client) Delete(ctx context.Context, key string, opts ...ClientOption) e
 	return nil
 }
 
+// List returns a list of objects matching the given criteria.
+//
+// This returns an iterator so you can loop over the values. The iterator handles
+// pagination for you.
 func (c *Client) List(ctx context.Context, opts ...ClientOption) iter.Seq2[*Object, error] {
 	o := new(ClientOptions).defaults(c.options)
 
@@ -547,64 +551,6 @@ func (c *Client) List(ctx context.Context, opts ...ClientOption) iter.Seq2[*Obje
 			continueToken = resp.NextContinuationToken
 		}
 	}
-}
-
-// List returns a list of objects matching the given criteria.
-//
-// The returned ListResult contains pagination information; use NextToken with
-// WithPaginationToken() to fetch the next page. HasMore indicates whether
-// additional objects are available. When WithDelimiter is set, CommonPrefixes
-// is populated with the grouped prefixes (for directory-like listings).
-func (c *Client) ListOld(ctx context.Context, opts ...ClientOption) (*ListResult, error) {
-	o := new(ClientOptions).defaults(c.options)
-
-	for _, doer := range opts {
-		doer(&o)
-	}
-
-	resp, err := c.cli.ListObjectsV2(
-		ctx,
-		&s3.ListObjectsV2Input{
-			Bucket:            aws.String(o.BucketName),
-			Delimiter:         o.Delimiter,
-			Prefix:            o.Prefix,
-			MaxKeys:           o.MaxKeys,
-			ContinuationToken: o.PaginationToken,
-			StartAfter:        o.StartAfter,
-		},
-		o.S3Options...,
-	)
-
-	if err != nil {
-		return nil, fmt.Errorf("simplestorage: can't list %s: %v", o.BucketName, err)
-	}
-
-	result := &ListResult{
-		Items:     make([]Object, 0, len(resp.Contents)),
-		NextToken: lower(resp.NextContinuationToken, ""),
-		HasMore:   lower(resp.IsTruncated, false),
-	}
-
-	for _, obj := range resp.Contents {
-		result.Items = append(result.Items, Object{
-			Bucket:       o.BucketName,
-			Key:          lower(obj.Key, ""),
-			Etag:         lower(obj.ETag, ""),
-			Size:         lower(obj.Size, 0),
-			LastModified: lower(obj.LastModified, time.Time{}),
-		})
-	}
-
-	if len(resp.CommonPrefixes) > 0 {
-		result.CommonPrefixes = make([]string, 0, len(resp.CommonPrefixes))
-		for _, p := range resp.CommonPrefixes {
-			if p.Prefix != nil {
-				result.CommonPrefixes = append(result.CommonPrefixes, *p.Prefix)
-			}
-		}
-	}
-
-	return result, nil
 }
 
 // PresignURL generates a presigned URL for the specified HTTP method, key, and expiry duration.
