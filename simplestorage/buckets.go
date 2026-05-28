@@ -137,7 +137,11 @@ func (c *Client) Buckets(ctx context.Context, opts ...BucketOption) iter.Seq2[*B
 		doer(&o)
 	}
 
-	const maxBuckets int32 = 50
+	maxBuckets := o.MaxKeys
+	if maxBuckets == nil {
+		const defaultMaxBuckets int32 = 50
+		maxBuckets = new(defaultMaxBuckets)
+	}
 
 	return func(yield func(bucketInfo *BucketInfo, err error) bool) {
 		continueToken := o.ContinuationToken
@@ -145,7 +149,7 @@ func (c *Client) Buckets(ctx context.Context, opts ...BucketOption) iter.Seq2[*B
 		for {
 			resp, err := c.cli.ListBuckets(ctx, &s3.ListBucketsInput{
 				ContinuationToken: continueToken,
-				MaxBuckets:        new(maxBuckets),
+				MaxBuckets:        maxBuckets,
 			}, o.S3Options...)
 
 			if err != nil {
