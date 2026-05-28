@@ -269,27 +269,39 @@ func (c *Client) Snapshots(ctx context.Context, bucket string, opts ...BucketOpt
 	o.S3Options = append(o.S3Options, tigrisheaders.WithHeader("X-Tigris-Snapshot", bucket))
 
 	return func(yield func(snapshotInfo *SnapshotInfo, err error) bool) {
-		resp, err := c.cli.ListBuckets(ctx, &s3.ListBucketsInput{}, o.S3Options...)
-		if err != nil {
-			yield(nil, err)
-			return
-		}
+		continueToken := o.ContinuationToken
 
-		for _, snapshot := range resp.Buckets {
-			// Tigris encodes each snapshot as a pseudo-bucket whose Name is the
-			// snapshot version followed by the description, e.g.
-			// "1779907846120844367; name=my+snapshot". Split the two apart and
-			// decode the description (spaces are encoded as "+").
-			version, desc, _ := strings.Cut(lower(snapshot.Name, ""), "; name=")
-
-			if !yield(&SnapshotInfo{
-				Name:    strings.ReplaceAll(desc, "+", " "),
-				Version: version,
-				Created: lower(snapshot.CreationDate, time.Time{}),
-				Bucket:  bucket,
-			}, nil) {
+		for {
+			resp, err := c.cli.ListBuckets(ctx, &s3.ListBucketsInput{
+				ContinuationToken: continueToken,
+			}, o.S3Options...)
+			if err != nil {
+				yield(nil, err)
 				return
 			}
+
+			for _, snapshot := range resp.Buckets {
+				// Tigris encodes each snapshot as a pseudo-bucket whose Name is the
+				// snapshot version followed by the description, e.g.
+				// "1779907846120844367; name=my+snapshot". Split the two apart and
+				// decode the description (spaces are encoded as "+").
+				version, desc, _ := strings.Cut(lower(snapshot.Name, ""), "; name=")
+
+				if !yield(&SnapshotInfo{
+					Name:    strings.ReplaceAll(desc, "+", " "),
+					Version: version,
+					Created: lower(snapshot.CreationDate, time.Time{}),
+					Bucket:  bucket,
+				}, nil) {
+					return
+				}
+			}
+
+			// An empty or absent continuation token means there are no more pages.
+			if resp.ContinuationToken == nil || *resp.ContinuationToken == "" {
+				return
+			}
+			continueToken = resp.ContinuationToken
 		}
 	}
 }
