@@ -188,11 +188,11 @@ func (c *Client) Buckets(ctx context.Context, opts ...BucketOption) iter.Seq2[*B
 	}
 }
 
-// GetBucketInfo retrieves metadata about the bucket with the given name.
+// Info retrieves metadata about the bucket with the given name.
 //
 // This includes Tigris-specific information like whether snapshots are enabled
 // and whether the bucket is a fork of another bucket.
-func (c *Client) GetBucketInfo(ctx context.Context, bucket string, opts ...BucketOption) (*BucketInfo, error) {
+func (c *Client) Info(ctx context.Context, bucket string, opts ...BucketOption) (*BucketInfo, error) {
 	if bucket == "" {
 		return nil, ErrBucketNameRequired
 	}

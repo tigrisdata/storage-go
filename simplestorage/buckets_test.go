@@ -232,7 +232,7 @@ func TestGetBucketInfo(t *testing.T) {
 				t.Fatalf("New() failed: %v", err)
 			}
 
-			_, err = client.GetBucketInfo(context.Background(), tt.bucket)
+			_, err = client.Info(context.Background(), tt.bucket)
 
 			if tt.wantErr && err == nil {
 				t.Errorf("GetBucketInfo() expected error, got nil")
@@ -432,7 +432,7 @@ func TestBucketLifecycle_integration(t *testing.T) {
 	bucket := setupTestBucket(t, ctx, client)
 
 	// Verify bucket was created
-	info, err := client.GetBucketInfo(ctx, bucket)
+	info, err := client.Info(ctx, bucket)
 	if err != nil {
 		t.Errorf("GetBucketInfo() failed: %v", err)
 	}

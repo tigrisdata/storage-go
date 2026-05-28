@@ -87,7 +87,7 @@ func ExampleClient_Buckets() {
 	}
 }
 
-func ExampleClient_GetBucketInfo() {
+func ExampleClient_Info() {
 	ctx := context.Background()
 
 	client, err := simplestorage.New(ctx,
@@ -98,7 +98,7 @@ func ExampleClient_GetBucketInfo() {
 	}
 
 	// Get bucket information
-	info, err := client.GetBucketInfo(ctx, "my-bucket")
+	info, err := client.Info(ctx, "my-bucket")
 	if err != nil {
 		log.Fatal(err) // handle the error here
 	}
@@ -209,7 +209,7 @@ func Example_bucketManagementWorkflow() {
 	_ = forkInfo // Use the fork info
 
 	// Get bucket info
-	info, err = client.GetBucketInfo(ctx, "my-forked-bucket")
+	info, err = client.Info(ctx, "my-forked-bucket")
 	if err != nil {
 		log.Fatal(err) // handle the error here
 	}
