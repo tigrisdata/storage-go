@@ -225,10 +225,10 @@ func (c *Client) GetBucketInfo(ctx context.Context, bucket string, opts ...Bucke
 	}, nil
 }
 
-// CreateBucketSnapshot creates a snapshot with the given description for a bucket.
+// Snapshot creates a snapshot with the given description for a bucket.
 //
 // The bucket must have snapshots enabled (created with WithEnableSnapshot()).
-func (c *Client) CreateBucketSnapshot(ctx context.Context, bucket, description string, opts ...BucketOption) (*SnapshotInfo, error) {
+func (c *Client) Snapshot(ctx context.Context, bucket, description string, opts ...BucketOption) (*SnapshotInfo, error) {
 	if bucket == "" {
 		return nil, ErrBucketNameRequired
 	}

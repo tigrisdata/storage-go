@@ -362,7 +362,7 @@ func TestCreateBucketSnapshot(t *testing.T) {
 				t.Fatalf("New() failed: %v", err)
 			}
 
-			_, err = client.CreateBucketSnapshot(context.Background(), tt.bucket, tt.description)
+			_, err = client.Snapshot(context.Background(), tt.bucket, tt.description)
 
 			if tt.wantErr && err == nil {
 				t.Errorf("CreateBucketSnapshot() expected error, got nil")
@@ -454,7 +454,7 @@ func TestBucketSnapshotList(t *testing.T) {
 	client = client.For(bucket)
 
 	snapshotName := t.Name()
-	sn, err := client.CreateBucketSnapshot(ctx, bucket, snapshotName)
+	sn, err := client.Snapshot(ctx, bucket, snapshotName)
 	if err != nil {
 		t.Fatalf("CreateBucketSnapshot(%q, %q) failed: %v", bucket, snapshotName, err)
 	}

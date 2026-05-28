@@ -109,7 +109,7 @@ func ExampleClient_GetBucketInfo() {
 	fmt.Printf("Source snapshot: %s\n", info.SourceSnapshot)
 }
 
-func ExampleClient_CreateBucketSnapshot() {
+func ExampleClient_Snapshot() {
 	ctx := context.Background()
 
 	client, err := simplestorage.New(ctx,
@@ -120,7 +120,7 @@ func ExampleClient_CreateBucketSnapshot() {
 	}
 
 	// Create a named snapshot
-	snapshot, err := client.CreateBucketSnapshot(ctx, "my-bucket", "Backup before migration")
+	snapshot, err := client.Snapshot(ctx, "my-bucket", "Backup before migration")
 	if err != nil {
 		log.Fatal(err) // handle the error here
 	}
@@ -194,7 +194,7 @@ func Example_bucketManagementWorkflow() {
 	}
 
 	// Create a snapshot
-	snapshot, err := client.CreateBucketSnapshot(ctx, "my-new-bucket", "Initial state")
+	snapshot, err := client.Snapshot(ctx, "my-new-bucket", "Initial state")
 	if err != nil {
 		log.Fatal(err) // handle the error here
 	}
