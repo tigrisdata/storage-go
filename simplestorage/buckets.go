@@ -266,11 +266,6 @@ func (c *Client) Snapshot(ctx context.Context, bucket, description string, opts 
 }
 
 // Snapshots lists all snapshots for the given bucket.
-//
-// Tigris returns each snapshot as a pseudo-bucket entry whose Name is the
-// snapshot version identifier. The user-provided description is not returned
-// by the ListBuckets API, so SnapshotInfo.Name is left empty; use the version
-// from CreateBucketSnapshot's response if you need to correlate descriptions.
 func (c *Client) Snapshots(ctx context.Context, bucket string, opts ...BucketOption) iter.Seq2[*SnapshotInfo, error] {
 	o := new(BucketOptions).defaults()
 	for _, doer := range opts {
