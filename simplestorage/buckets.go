@@ -167,6 +167,7 @@ func (c *Client) Buckets(ctx context.Context, opts ...BucketOption) iter.Seq2[*B
 						continue
 					}
 
+					bi.Created = lower(bucket.CreationDate, time.Time{})
 					if !yield(bi, nil) {
 						return
 					}
