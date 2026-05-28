@@ -486,6 +486,7 @@ func collect[T any](i iter.Seq2[T, error]) ([]T, error) {
 	for item, err := range i {
 		if err != nil {
 			errs = append(errs, err)
+			continue
 		}
 
 		result = append(result, item)
