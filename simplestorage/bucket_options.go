@@ -43,6 +43,10 @@ type BucketOptions struct {
 
 	// S3Options are additional S3 options passed through to the underlying client.
 	S3Options []func(*s3.Options)
+
+	// GrabForkInfo makes Buckets calls grab additional information about buckets from
+	// Tigris about forkability and what snapshot the bucket was forked from.
+	GrabForkInfo bool
 }
 
 // defaults populates BucketOptions with default values.
@@ -131,6 +135,16 @@ func WithForkSourceSnapshot(snapshot string) BucketOption {
 func WithBucketAccess(access AccessType) BucketOption {
 	return func(o *BucketOptions) {
 		o.Access = access
+	}
+}
+
+// WithGrabForkInfo instructs the Buckets() call to grab additional information about
+// bucket forkability and the snapshot each bucket was based on.
+//
+// Using this will incur an additional Tigris round trip per invocation.
+func WithGrabForkInfo() BucketOption {
+	return func(o *BucketOptions) {
+		o.GrabForkInfo = true
 	}
 }
 

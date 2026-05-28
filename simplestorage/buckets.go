@@ -141,8 +141,9 @@ func containsBucketNotEmptyError(err error) bool {
 
 // Buckets lists all buckets that the authenticated user has access to.
 //
-// This returns an iterator over all of your buckets including Tigris-specific
-// metadata about forks and snapshots.
+// This returns an iterator over all of your buckets. If you want this to include
+// Tigris-specific information such as forkability and what snapshot this bucket was
+// based upon, use the WithGrabForkInfo() functional option.
 func (c *Client) Buckets(ctx context.Context, opts ...BucketOption) iter.Seq2[*BucketInfo, error] {
 	o := new(BucketOptions).defaults()
 	for _, doer := range opts {
@@ -166,16 +167,26 @@ func (c *Client) Buckets(ctx context.Context, opts ...BucketOption) iter.Seq2[*B
 			}
 
 			for _, bucket := range resp.Buckets {
-				bi, err := c.GetBucketInfo(ctx, *bucket.Name)
-				if err != nil {
-					if !yield(nil, err) {
+				switch o.GrabForkInfo {
+				case true:
+					bi, err := c.Info(ctx, *bucket.Name)
+					if err != nil {
+						if !yield(nil, err) {
+							return
+						}
+						continue
+					}
+
+					if !yield(bi, nil) {
 						return
 					}
-					continue
-				}
-
-				if !yield(bi, nil) {
-					return
+				case false:
+					if !yield(&BucketInfo{
+						Name:    lower(bucket.Name, ""),
+						Created: lower(bucket.CreationDate, time.Time{}),
+					}, nil) {
+						return
+					}
 				}
 			}
 
