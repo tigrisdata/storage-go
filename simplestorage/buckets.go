@@ -169,7 +169,7 @@ func (c *Client) Buckets(ctx context.Context, opts ...BucketOption) iter.Seq2[*B
 			for _, bucket := range resp.Buckets {
 				switch o.GrabForkInfo {
 				case true:
-					bi, err := c.Info(ctx, *bucket.Name)
+					bi, err := c.Info(ctx, lower(bucket.Name, ""))
 					if err != nil {
 						if !yield(nil, err) {
 							return

@@ -59,43 +59,6 @@ func WithS3Options(opts ...func(*s3.Options)) ClientOption {
 	}
 }
 
-// WithStartAfter sets the StartAfter setting in List calls. Use this if you need
-// pagination in your List calls.
-func WithStartAfter(startAfter string) ClientOption {
-	return func(co *ClientOptions) {
-		co.StartAfter = aws.String(startAfter)
-	}
-}
-
-// WithMaxKeys sets the maximum number of keys in List calls. Use this along with
-// WithStartAfter for pagination in your List calls.
-func WithMaxKeys(maxKeys int32) ClientOption {
-	return func(co *ClientOptions) {
-		co.MaxKeys = &maxKeys
-	}
-}
-
-// WithDelimiter sets a delimiter for grouping keys in List calls.
-func WithDelimiter(delimiter string) ClientOption {
-	return func(co *ClientOptions) {
-		co.Delimiter = aws.String(delimiter)
-	}
-}
-
-// WithPrefix sets the prefix to filter keys in List calls.
-func WithPrefix(prefix string) ClientOption {
-	return func(co *ClientOptions) {
-		co.Prefix = aws.String(prefix)
-	}
-}
-
-// WithPaginationToken sets the pagination token to continue listing objects.
-func WithPaginationToken(token string) ClientOption {
-	return func(co *ClientOptions) {
-		co.PaginationToken = aws.String(token)
-	}
-}
-
 // WithContentType sets the Content-Type header. Used by Put (the object
 // Content-Type takes precedence when non-empty) and by presigned PUT URLs.
 func WithContentType(contentType string) ClientOption {
@@ -193,13 +156,6 @@ func WithAccessType(access AccessType) ClientOption {
 type ClientOptions struct {
 	BucketName string
 	S3Options  []func(*s3.Options)
-
-	// List options
-	StartAfter      *string
-	MaxKeys         *int32
-	Delimiter       *string
-	Prefix          *string
-	PaginationToken *string
 
 	// Put and presign options
 	ContentType        *string
@@ -500,28 +456,31 @@ func (c *Client) Delete(ctx context.Context, key string, opts ...ClientOption) e
 // List returns a list of objects matching the given criteria.
 //
 // This returns an iterator so you can loop over the values. The iterator handles
-// pagination for you.
-func (c *Client) List(ctx context.Context, opts ...ClientOption) iter.Seq2[*Object, error] {
-	o := new(ClientOptions).defaults(c.options)
-
+// pagination for you; the page size can be tuned with WithMaxKeys. Combine
+// WithPrefix and WithDelimiter to walk a single "directory" level, or
+// WithStartAfter and WithContinueToken to resume a previous listing.
+func (c *Client) List(ctx context.Context, opts ...ListOption) iter.Seq2[*Object, error] {
+	var lo listOptions
 	for _, doer := range opts {
-		doer(&o)
+		doer(&lo)
 	}
 
+	bucket := c.options.BucketName
+
 	return func(yield func(obj *Object, err error) bool) {
-		var continueToken *string
+		continueToken := lo.ContinueToken
 		for {
 			resp, err := c.cli.ListObjectsV2(
 				ctx,
 				&s3.ListObjectsV2Input{
-					Bucket:            new(o.BucketName),
-					Delimiter:         o.Delimiter,
-					Prefix:            o.Prefix,
-					MaxKeys:           o.MaxKeys,
+					Bucket:            new(bucket),
+					Delimiter:         lo.Delimiter,
+					Prefix:            lo.Prefix,
+					MaxKeys:           lo.MaxKeys,
 					ContinuationToken: continueToken,
-					StartAfter:        o.StartAfter,
+					StartAfter:        lo.StartAfter,
 				},
-				o.S3Options...,
+				lo.S3Options...,
 			)
 
 			if err != nil {
@@ -532,7 +491,7 @@ func (c *Client) List(ctx context.Context, opts ...ClientOption) iter.Seq2[*Obje
 			for _, obj := range resp.Contents {
 				if !yield(
 					&Object{
-						Bucket:       o.BucketName,
+						Bucket:       bucket,
 						Key:          lower(obj.Key, ""),
 						Etag:         lower(obj.ETag, ""),
 						Size:         lower(obj.Size, 0),
@@ -544,7 +503,7 @@ func (c *Client) List(ctx context.Context, opts ...ClientOption) iter.Seq2[*Obje
 				}
 			}
 
-			// If the response is not truncated, there are more results to be returned.
+			// If the response is not truncated, there are no more results to return.
 			if !*resp.IsTruncated {
 				return
 			}
