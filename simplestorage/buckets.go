@@ -171,7 +171,10 @@ func (c *Client) Buckets(ctx context.Context, opts ...BucketOption) iter.Seq2[*B
 				case true:
 					bi, err := c.Info(ctx, lower(bucket.Name, ""))
 					if err != nil {
-						if !yield(nil, err) {
+						if !yield(&BucketInfo{
+							Name:    lower(bucket.Name, ""),
+							Created: lower(bucket.CreationDate, time.Time{}),
+						}, nil) {
 							return
 						}
 						continue
