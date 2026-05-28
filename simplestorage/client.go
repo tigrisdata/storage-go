@@ -504,7 +504,7 @@ func (c *Client) List(ctx context.Context, opts ...ListOption) iter.Seq2[*Object
 			}
 
 			// If the response is not truncated, there are no more results to return.
-			if !*resp.IsTruncated {
+			if !lower(resp.IsTruncated, false) {
 				return
 			}
 			continueToken = resp.NextContinuationToken
