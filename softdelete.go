@@ -44,7 +44,7 @@ type CreateBucketWithSoftDeleteInput struct {
 // an object or the bucket then moves it into a recoverable soft-deleted state for
 // the retention window instead of removing it immediately.
 //
-// See the Tigris documentation[1] for more information.
+// See Tigris documentation[1] for more information.
 //
 // [1]: https://www.tigrisdata.com/docs/buckets/soft-delete/
 func (c *Client) CreateBucketWithSoftDelete(ctx context.Context, in *CreateBucketWithSoftDeleteInput, optFns ...func(*s3.Options)) (*s3.CreateBucketOutput, error) {
@@ -72,7 +72,7 @@ func (c *Client) CreateBucketWithSoftDelete(ctx context.Context, in *CreateBucke
 // the consequences of your actions. Support will not be able to help you
 // recover any buckets or objects deleted in this way.
 //
-// See the Tigris documentation[1] for more information.
+// See Tigris documentation[1] for more information.
 //
 // [1]: https://www.tigrisdata.com/docs/buckets/soft-delete/
 func (c *Client) ForceDeleteBucket(ctx context.Context, in *s3.DeleteBucketInput, opts ...func(*s3.Options)) (*s3.DeleteBucketOutput, error) {
@@ -94,7 +94,7 @@ func (c *Client) ForceDeleteBucket(ctx context.Context, in *s3.DeleteBucketInput
 // the consequences of your actions. Support will not be able to help you
 // recover any buckets or objects deleted in this way.
 //
-// See the Tigris documentation[1] for more information.
+// See Tigris documentation[1] for more information.
 //
 // [1]: https://www.tigrisdata.com/docs/buckets/soft-delete/
 func (c *Client) PermanentlyDeleteObject(ctx context.Context, bucket, key, versionID string, opts ...func(*s3.Options)) (*s3.DeleteObjectOutput, error) {
@@ -189,7 +189,7 @@ type deleteMarkerEntry struct {
 // markers. Use the returned VersionID with RestoreSoftDeletedObject to recover a
 // version or PermanentlyDeleteObject to purge it.
 //
-// See the Tigris documentation[1] for more information.
+// See Tigris documentation[1] for more information.
 //
 // [1]: https://www.tigrisdata.com/docs/buckets/soft-delete/
 func (c *Client) ListSoftDeletedObjects(ctx context.Context, in *ListSoftDeletedObjectsInput) (*ListSoftDeletedObjectsOutput, error) {
@@ -278,7 +278,7 @@ type RestoreSoftDeletedObjectOutput struct{}
 // RestoreSoftDeletedObject restores a soft-deleted object, undoing a delete
 // before its retention window expires.
 //
-// See the Tigris documentation[1] for more information.
+// See Tigris documentation[1] for more information.
 //
 // [1]: https://www.tigrisdata.com/docs/buckets/soft-delete/
 func (c *Client) RestoreSoftDeletedObject(ctx context.Context, in *RestoreSoftDeletedObjectInput) (*RestoreSoftDeletedObjectOutput, error) {
@@ -323,7 +323,7 @@ type RestoreBucketOutput struct{}
 // RestoreBucket restores a soft-deleted bucket, recovering it and its contents
 // before the retention window expires.
 //
-// See the Tigris documentation[1] for more information.
+// See Tigris documentation[1] for more information.
 //
 // [1]: https://www.tigrisdata.com/docs/buckets/soft-delete/
 func (c *Client) RestoreBucket(ctx context.Context, in *RestoreBucketInput) (*RestoreBucketOutput, error) {
@@ -372,7 +372,7 @@ type SetBucketSoftDeleteOutput struct{}
 
 // SetBucketSoftDelete enables or disables soft delete on an existing bucket.
 //
-// See the Tigris documentation[1] for more information.
+// See Tigris documentation[1] for more information.
 //
 // [1]: https://www.tigrisdata.com/docs/buckets/soft-delete/
 func (c *Client) SetBucketSoftDelete(ctx context.Context, in *SetBucketSoftDeleteInput) (*SetBucketSoftDeleteOutput, error) {

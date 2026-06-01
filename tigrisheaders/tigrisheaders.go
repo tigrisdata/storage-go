@@ -130,7 +130,7 @@ func WithEnableSnapshot() func(*s3.Options) {
 // integer between 7 and 90 to set a custom window in days; only the first value
 // is used. Values outside the 7-90 range are rejected by the server.
 //
-// See the Tigris documentation[1] for more information.
+// See Tigris documentation[1] for more information.
 //
 // [1]: https://www.tigrisdata.com/docs/buckets/soft-delete/
 func WithSoftDelete(days ...int) func(*s3.Options) {
@@ -146,7 +146,7 @@ func WithSoftDelete(days ...int) func(*s3.Options) {
 // soft-deleted state for the retention window instead of being permanently
 // removed. Otherwise the bucket and its contents are permanently deleted.
 //
-// See the Tigris documentation[1] for more information.
+// See Tigris documentation[1] for more information.
 //
 // [1]: https://www.tigrisdata.com/docs/buckets/soft-delete/
 func WithForceDelete() func(*s3.Options) {
