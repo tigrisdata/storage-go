@@ -186,19 +186,12 @@ func ExampleClient_List_delimiter() {
 	}
 
 	// Walk one "directory" level under prefix "reports/" using "/" as a delimiter.
-	result, err := client.List(ctx,
-		simplestorage.WithPrefix("reports/"),
-		simplestorage.WithDelimiter("/"),
-	)
-	if err != nil {
-		log.Fatal(err) // handle the error here
-	}
+	for obj, err := range client.List(ctx, simplestorage.WithPrefix("reports/"), simplestorage.WithDelimiter("/")) {
+		if err != nil {
+			log.Fatal(err) // handle error
+		}
 
-	for _, p := range result.CommonPrefixes {
-		fmt.Println("sub-prefix:", p)
-	}
-	for _, o := range result.Items {
-		fmt.Println("object:", o.Key)
+		fmt.Println("object:", obj.Key)
 	}
 }
 

@@ -46,15 +46,6 @@ func TestClientOptions(t *testing.T) {
 		verify func(*testing.T, *ClientOptions)
 	}{
 		{
-			name:   "WithDelimiter sets Delimiter",
-			option: WithDelimiter("/"),
-			verify: func(t *testing.T, o *ClientOptions) {
-				if o.Delimiter == nil || *o.Delimiter != "/" {
-					t.Errorf("Delimiter = %v, want %q", o.Delimiter, "/")
-				}
-			},
-		},
-		{
 			name:   "WithQuerySnapshotVersion sets SnapshotVersion",
 			option: WithQuerySnapshotVersion("test-version"),
 			verify: func(t *testing.T, o *ClientOptions) {
@@ -132,15 +123,6 @@ func TestClientOptions(t *testing.T) {
 			verify: func(t *testing.T, o *ClientOptions) {
 				if o.UploadProgressCallback == nil {
 					t.Errorf("UploadProgressCallback = nil, want non-nil")
-				}
-			},
-		},
-		{
-			name:   "WithPrefix sets Prefix",
-			option: WithPrefix("test-prefix/"),
-			verify: func(t *testing.T, o *ClientOptions) {
-				if o.Prefix == nil || *o.Prefix != "test-prefix/" {
-					t.Errorf("Prefix = %v, want %q", o.Prefix, "test-prefix/")
 				}
 			},
 		},

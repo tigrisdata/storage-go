@@ -67,7 +67,7 @@ func ExampleClient_DeleteBucket() {
 	}
 }
 
-func ExampleClient_ListBuckets() {
+func ExampleClient_Buckets() {
 	ctx := context.Background()
 
 	client, err := simplestorage.New(ctx,
@@ -77,35 +77,17 @@ func ExampleClient_ListBuckets() {
 		log.Fatal(err)
 	}
 
-	// List all buckets
-	list, err := client.ListBuckets(ctx)
-	if err != nil {
-		log.Fatal(err) // handle the error here
-	}
-
-	for _, bucket := range list.Buckets {
-		fmt.Printf("Bucket: %s (created: %s)\n", bucket.Name, bucket.Created)
-	}
-
-	// Paginated listing
-	for {
-		list, err = client.ListBuckets(ctx,
-			simplestorage.WithListLimit(50),
-			simplestorage.WithListToken(list.NextToken),
-		)
+	// ListBuckets returns an iterator that transparently handles pagination.
+	for bucket, err := range client.Buckets(ctx) {
 		if err != nil {
 			log.Fatal(err) // handle the error here
 		}
 
-		// Process buckets...
-
-		if !list.Truncated {
-			break
-		}
+		fmt.Printf("Bucket: %s (created: %s)\n", bucket.Name, bucket.Created)
 	}
 }
 
-func ExampleClient_GetBucketInfo() {
+func ExampleClient_Info() {
 	ctx := context.Background()
 
 	client, err := simplestorage.New(ctx,
@@ -116,7 +98,7 @@ func ExampleClient_GetBucketInfo() {
 	}
 
 	// Get bucket information
-	info, err := client.GetBucketInfo(ctx, "my-bucket")
+	info, err := client.Info(ctx, "my-bucket")
 	if err != nil {
 		log.Fatal(err) // handle the error here
 	}
@@ -127,7 +109,7 @@ func ExampleClient_GetBucketInfo() {
 	fmt.Printf("Source snapshot: %s\n", info.SourceSnapshot)
 }
 
-func ExampleClient_CreateBucketSnapshot() {
+func ExampleClient_Snapshot() {
 	ctx := context.Background()
 
 	client, err := simplestorage.New(ctx,
@@ -138,7 +120,7 @@ func ExampleClient_CreateBucketSnapshot() {
 	}
 
 	// Create a named snapshot
-	snapshot, err := client.CreateBucketSnapshot(ctx, "my-bucket", "Backup before migration")
+	snapshot, err := client.Snapshot(ctx, "my-bucket", "Backup before migration")
 	if err != nil {
 		log.Fatal(err) // handle the error here
 	}
@@ -146,24 +128,21 @@ func ExampleClient_CreateBucketSnapshot() {
 	fmt.Printf("Created snapshot: %s (version: %s)\n", snapshot.Name, snapshot.Version)
 }
 
-func ExampleClient_ListBucketSnapshots() {
+func ExampleClient_Snapshots() {
 	ctx := context.Background()
 
 	client, err := simplestorage.New(ctx,
 		simplestorage.WithBucket("my-default-bucket"),
 	)
 	if err != nil {
-		log.Fatal(err)
+		log.Fatal(err) // handle error here
 	}
 
-	// List all snapshots for a bucket
-	snapshots, err := client.ListBucketSnapshots(ctx, "my-bucket")
-	if err != nil {
-		log.Fatal(err) // handle the error here
-	}
-
-	for _, snap := range snapshots.Snapshots {
-		fmt.Printf("Snapshot: %s (version: %s, created: %s)\n", snap.Name, snap.Version, snap.Created)
+	for snapshot, err := range client.Snapshots(ctx, "my-bucket") {
+		if err != nil {
+			log.Fatal(err) // handle error here
+		}
+		fmt.Printf("Snapshot: %s (version: %s, created: %s)\n", snapshot.Name, snapshot.Version, snapshot.Created)
 	}
 }
 
@@ -215,7 +194,7 @@ func Example_bucketManagementWorkflow() {
 	}
 
 	// Create a snapshot
-	snapshot, err := client.CreateBucketSnapshot(ctx, "my-new-bucket", "Initial state")
+	snapshot, err := client.Snapshot(ctx, "my-new-bucket", "Initial state")
 	if err != nil {
 		log.Fatal(err) // handle the error here
 	}
@@ -230,7 +209,7 @@ func Example_bucketManagementWorkflow() {
 	_ = forkInfo // Use the fork info
 
 	// Get bucket info
-	info, err = client.GetBucketInfo(ctx, "my-forked-bucket")
+	info, err = client.Info(ctx, "my-forked-bucket")
 	if err != nil {
 		log.Fatal(err) // handle the error here
 	}

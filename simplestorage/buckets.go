@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"iter"
 	"strings"
 	"time"
 
@@ -38,25 +39,12 @@ type BucketInfo struct {
 	SourceSnapshot   string // If this is a fork, the snapshot version
 }
 
-// BucketList contains a paginated list of buckets.
-type BucketList struct {
-	Buckets   []BucketInfo // List of buckets
-	NextToken string       // Pagination token for next page
-	Truncated bool         // True if more results available
-}
-
 // SnapshotInfo contains metadata about a bucket snapshot.
 type SnapshotInfo struct {
 	Name    string    // Snapshot name/description
 	Version string    // Snapshot version ID
 	Created time.Time // Creation time
 	Bucket  string    // Source bucket name
-}
-
-// SnapshotList contains a list of snapshots for a bucket.
-type SnapshotList struct {
-	Snapshots []SnapshotInfo // List of snapshots
-	Bucket    string         // Source bucket name
 }
 
 // CreateBucket creates a new bucket with the given name.
@@ -138,46 +126,79 @@ func containsBucketNotEmptyError(err error) bool {
 		strings.Contains(errMsg, "NotEmpty")
 }
 
-// ListBuckets lists all buckets that the authenticated user has access to.
+// Buckets lists all buckets that the authenticated user has access to.
 //
-// Use WithListToken() for pagination. Note that WithListLimit() is not supported
-// by the underlying S3 ListBuckets API and is ignored.
-func (c *Client) ListBuckets(ctx context.Context, opts ...BucketOption) (*BucketList, error) {
+// This returns an iterator over all of your buckets. If you want this to include
+// Tigris-specific information such as forkability and what snapshot this bucket was
+// based upon, use the WithGrabForkInfo() functional option.
+func (c *Client) Buckets(ctx context.Context, opts ...BucketOption) iter.Seq2[*BucketInfo, error] {
 	o := new(BucketOptions).defaults()
 	for _, doer := range opts {
 		doer(&o)
 	}
 
-	resp, err := c.cli.ListBuckets(ctx, &s3.ListBucketsInput{
-		ContinuationToken: o.ContinuationToken,
-	}, o.S3Options...)
-
-	if err != nil {
-		return nil, fmt.Errorf("simplestorage: can't list buckets: %w", err)
+	maxBuckets := o.MaxKeys
+	if maxBuckets == nil {
+		const defaultMaxBuckets int32 = 50
+		maxBuckets = new(defaultMaxBuckets)
 	}
 
-	result := &BucketList{
-		Buckets:   make([]BucketInfo, 0, len(resp.Buckets)),
-		Truncated: resp.ContinuationToken != nil,
+	return func(yield func(bucketInfo *BucketInfo, err error) bool) {
+		continueToken := o.ContinuationToken
+
+		for {
+			resp, err := c.cli.ListBuckets(ctx, &s3.ListBucketsInput{
+				ContinuationToken: continueToken,
+				MaxBuckets:        maxBuckets,
+			}, o.S3Options...)
+
+			if err != nil {
+				yield(nil, err)
+				return
+			}
+
+			for _, bucket := range resp.Buckets {
+				switch o.GrabForkInfo {
+				case true:
+					bi, err := c.Info(ctx, lower(bucket.Name, ""))
+					if err != nil {
+						if !yield(&BucketInfo{
+							Name:    lower(bucket.Name, ""),
+							Created: lower(bucket.CreationDate, time.Time{}),
+						}, nil) {
+							return
+						}
+						continue
+					}
+
+					bi.Created = lower(bucket.CreationDate, time.Time{})
+					if !yield(bi, nil) {
+						return
+					}
+				case false:
+					if !yield(&BucketInfo{
+						Name:    lower(bucket.Name, ""),
+						Created: lower(bucket.CreationDate, time.Time{}),
+					}, nil) {
+						return
+					}
+				}
+			}
+
+			// An empty or absent continuation token means there are no more pages.
+			if resp.ContinuationToken == nil || *resp.ContinuationToken == "" {
+				return
+			}
+			continueToken = resp.ContinuationToken
+		}
 	}
-
-	for _, b := range resp.Buckets {
-		result.Buckets = append(result.Buckets, BucketInfo{
-			Name:    lower(b.Name, ""),
-			Created: lower(b.CreationDate, time.Time{}),
-		})
-	}
-
-	result.NextToken = lower(resp.ContinuationToken, "")
-
-	return result, nil
 }
 
-// GetBucketInfo retrieves metadata about the bucket with the given name.
+// Info retrieves metadata about the bucket with the given name.
 //
 // This includes Tigris-specific information like whether snapshots are enabled
 // and whether the bucket is a fork of another bucket.
-func (c *Client) GetBucketInfo(ctx context.Context, bucket string, opts ...BucketOption) (*BucketInfo, error) {
+func (c *Client) Info(ctx context.Context, bucket string, opts ...BucketOption) (*BucketInfo, error) {
 	if bucket == "" {
 		return nil, ErrBucketNameRequired
 	}
@@ -210,10 +231,10 @@ func (c *Client) GetBucketInfo(ctx context.Context, bucket string, opts ...Bucke
 	}, nil
 }
 
-// CreateBucketSnapshot creates a snapshot with the given description for a bucket.
+// Snapshot creates a snapshot with the given description for a bucket.
 //
 // The bucket must have snapshots enabled (created with WithEnableSnapshot()).
-func (c *Client) CreateBucketSnapshot(ctx context.Context, bucket, description string, opts ...BucketOption) (*SnapshotInfo, error) {
+func (c *Client) Snapshot(ctx context.Context, bucket, description string, opts ...BucketOption) (*SnapshotInfo, error) {
 	if bucket == "" {
 		return nil, ErrBucketNameRequired
 	}
@@ -239,41 +260,51 @@ func (c *Client) CreateBucketSnapshot(ctx context.Context, bucket, description s
 	}, nil
 }
 
-// ListBucketSnapshots lists all snapshots for the given bucket.
-//
-// Tigris returns each snapshot as a pseudo-bucket entry whose Name is the
-// snapshot version identifier. The user-provided description is not returned
-// by the ListBuckets API, so SnapshotInfo.Name is left empty; use the version
-// from CreateBucketSnapshot's response if you need to correlate descriptions.
-func (c *Client) ListBucketSnapshots(ctx context.Context, bucket string, opts ...BucketOption) (*SnapshotList, error) {
-	if bucket == "" {
-		return nil, ErrBucketNameRequired
-	}
-
+// Snapshots lists all snapshots for the given bucket.
+func (c *Client) Snapshots(ctx context.Context, bucket string, opts ...BucketOption) iter.Seq2[*SnapshotInfo, error] {
 	o := new(BucketOptions).defaults()
 	for _, doer := range opts {
 		doer(&o)
 	}
 
-	resp, err := c.cli.ListBucketSnapshots(ctx, bucket, o.S3Options...)
-	if err != nil {
-		return nil, fmt.Errorf("simplestorage: can't list snapshots for bucket %s: %w", bucket, err)
-	}
+	o.S3Options = append(o.S3Options, tigrisheaders.WithHeader("X-Tigris-Snapshot", bucket))
 
-	result := &SnapshotList{
-		Bucket:    bucket,
-		Snapshots: make([]SnapshotInfo, 0, len(resp.Buckets)),
-	}
+	return func(yield func(snapshotInfo *SnapshotInfo, err error) bool) {
+		continueToken := o.ContinuationToken
 
-	for _, b := range resp.Buckets {
-		result.Snapshots = append(result.Snapshots, SnapshotInfo{
-			Version: lower(b.Name, ""),
-			Created: lower(b.CreationDate, time.Time{}),
-			Bucket:  bucket,
-		})
-	}
+		for {
+			resp, err := c.cli.ListBuckets(ctx, &s3.ListBucketsInput{
+				ContinuationToken: continueToken,
+			}, o.S3Options...)
+			if err != nil {
+				yield(nil, err)
+				return
+			}
 
-	return result, nil
+			for _, snapshot := range resp.Buckets {
+				// Tigris encodes each snapshot as a pseudo-bucket whose Name is the
+				// snapshot version followed by the description, e.g.
+				// "1779907846120844367; name=my+snapshot". Split the two apart and
+				// decode the description (spaces are encoded as "+").
+				version, desc, _ := strings.Cut(lower(snapshot.Name, ""), "; name=")
+
+				if !yield(&SnapshotInfo{
+					Name:    strings.ReplaceAll(desc, "+", " "),
+					Version: version,
+					Created: lower(snapshot.CreationDate, time.Time{}),
+					Bucket:  bucket,
+				}, nil) {
+					return
+				}
+			}
+
+			// An empty or absent continuation token means there are no more pages.
+			if resp.ContinuationToken == nil || *resp.ContinuationToken == "" {
+				return
+			}
+			continueToken = resp.ContinuationToken
+		}
+	}
 }
 
 // ForkBucket creates a fork of the source bucket with the given target name.

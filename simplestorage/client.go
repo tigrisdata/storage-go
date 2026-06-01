@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"iter"
 	"net/http"
 	"time"
 
@@ -55,43 +56,6 @@ func OverrideBucket(bucket string) ClientOption {
 func WithS3Options(opts ...func(*s3.Options)) ClientOption {
 	return func(co *ClientOptions) {
 		co.S3Options = append(co.S3Options, opts...)
-	}
-}
-
-// WithStartAfter sets the StartAfter setting in List calls. Use this if you need
-// pagination in your List calls.
-func WithStartAfter(startAfter string) ClientOption {
-	return func(co *ClientOptions) {
-		co.StartAfter = aws.String(startAfter)
-	}
-}
-
-// WithMaxKeys sets the maximum number of keys in List calls. Use this along with
-// WithStartAfter for pagination in your List calls.
-func WithMaxKeys(maxKeys int32) ClientOption {
-	return func(co *ClientOptions) {
-		co.MaxKeys = &maxKeys
-	}
-}
-
-// WithDelimiter sets a delimiter for grouping keys in List calls.
-func WithDelimiter(delimiter string) ClientOption {
-	return func(co *ClientOptions) {
-		co.Delimiter = aws.String(delimiter)
-	}
-}
-
-// WithPrefix sets the prefix to filter keys in List calls.
-func WithPrefix(prefix string) ClientOption {
-	return func(co *ClientOptions) {
-		co.Prefix = aws.String(prefix)
-	}
-}
-
-// WithPaginationToken sets the pagination token to continue listing objects.
-func WithPaginationToken(token string) ClientOption {
-	return func(co *ClientOptions) {
-		co.PaginationToken = aws.String(token)
 	}
 }
 
@@ -192,13 +156,6 @@ func WithAccessType(access AccessType) ClientOption {
 type ClientOptions struct {
 	BucketName string
 	S3Options  []func(*s3.Options)
-
-	// List options
-	StartAfter      *string
-	MaxKeys         *int32
-	Delimiter       *string
-	Prefix          *string
-	PaginationToken *string
 
 	// Put and presign options
 	ContentType        *string
@@ -306,14 +263,6 @@ type Object struct {
 	Metadata           map[string]string // Custom metadata headers
 	URL                string            // Public or presigned URL for the object
 	Body               io.ReadCloser     // Body of the object so it can be read, don't forget to close it.
-}
-
-// ListResult contains the result of a List operation, including pagination information.
-type ListResult struct {
-	Items          []Object // List of objects
-	CommonPrefixes []string // Common prefixes grouped by delimiter (populated when WithDelimiter is set)
-	NextToken      string   // Pagination token for the next page
-	HasMore        bool     // Whether there are more objects to list
 }
 
 // Get fetches the contents of an object and its metadata from Tigris.
@@ -498,60 +447,61 @@ func (c *Client) Delete(ctx context.Context, key string, opts ...ClientOption) e
 
 // List returns a list of objects matching the given criteria.
 //
-// The returned ListResult contains pagination information; use NextToken with
-// WithPaginationToken() to fetch the next page. HasMore indicates whether
-// additional objects are available. When WithDelimiter is set, CommonPrefixes
-// is populated with the grouped prefixes (for directory-like listings).
-func (c *Client) List(ctx context.Context, opts ...ClientOption) (*ListResult, error) {
-	o := new(ClientOptions).defaults(c.options)
-
+// This returns an iterator so you can loop over the values. The iterator handles
+// pagination for you; the page size can be tuned with WithMaxKeys. Combine
+// WithPrefix and WithDelimiter to walk a single "directory" level, or
+// WithStartAfter and WithContinueToken to resume a previous listing.
+func (c *Client) List(ctx context.Context, opts ...ListOption) iter.Seq2[*Object, error] {
+	var lo listOptions
 	for _, doer := range opts {
-		doer(&o)
+		doer(&lo)
 	}
 
-	resp, err := c.cli.ListObjectsV2(
-		ctx,
-		&s3.ListObjectsV2Input{
-			Bucket:            aws.String(o.BucketName),
-			Delimiter:         o.Delimiter,
-			Prefix:            o.Prefix,
-			MaxKeys:           o.MaxKeys,
-			ContinuationToken: o.PaginationToken,
-			StartAfter:        o.StartAfter,
-		},
-		o.S3Options...,
-	)
+	bucket := c.options.BucketName
 
-	if err != nil {
-		return nil, fmt.Errorf("simplestorage: can't list %s: %v", o.BucketName, err)
-	}
+	return func(yield func(obj *Object, err error) bool) {
+		continueToken := lo.ContinueToken
+		for {
+			resp, err := c.cli.ListObjectsV2(
+				ctx,
+				&s3.ListObjectsV2Input{
+					Bucket:            new(bucket),
+					Delimiter:         lo.Delimiter,
+					Prefix:            lo.Prefix,
+					MaxKeys:           lo.MaxKeys,
+					ContinuationToken: continueToken,
+					StartAfter:        lo.StartAfter,
+				},
+				lo.S3Options...,
+			)
 
-	result := &ListResult{
-		Items:     make([]Object, 0, len(resp.Contents)),
-		NextToken: lower(resp.NextContinuationToken, ""),
-		HasMore:   lower(resp.IsTruncated, false),
-	}
-
-	for _, obj := range resp.Contents {
-		result.Items = append(result.Items, Object{
-			Bucket:       o.BucketName,
-			Key:          lower(obj.Key, ""),
-			Etag:         lower(obj.ETag, ""),
-			Size:         lower(obj.Size, 0),
-			LastModified: lower(obj.LastModified, time.Time{}),
-		})
-	}
-
-	if len(resp.CommonPrefixes) > 0 {
-		result.CommonPrefixes = make([]string, 0, len(resp.CommonPrefixes))
-		for _, p := range resp.CommonPrefixes {
-			if p.Prefix != nil {
-				result.CommonPrefixes = append(result.CommonPrefixes, *p.Prefix)
+			if err != nil {
+				yield(nil, err)
+				return
 			}
+
+			for _, obj := range resp.Contents {
+				if !yield(
+					&Object{
+						Bucket:       bucket,
+						Key:          lower(obj.Key, ""),
+						Etag:         lower(obj.ETag, ""),
+						Size:         lower(obj.Size, 0),
+						LastModified: lower(obj.LastModified, time.Time{}),
+					},
+					nil,
+				) {
+					return
+				}
+			}
+
+			// If the response is not truncated, there are no more results to return.
+			if !lower(resp.IsTruncated, false) {
+				return
+			}
+			continueToken = resp.NextContinuationToken
 		}
 	}
-
-	return result, nil
 }
 
 // PresignURL generates a presigned URL for the specified HTTP method, key, and expiry duration.

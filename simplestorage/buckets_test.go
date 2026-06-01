@@ -4,11 +4,13 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"iter"
 	"os"
 	"testing"
 	"time"
 
 	_ "github.com/joho/godotenv/autoload"
+	"github.com/tigrisdata/storage-go/tigrisheaders"
 )
 
 // skipIfNoCreds skips the test if Tigris credentials are not set.
@@ -28,21 +30,21 @@ func setupTestBucket(t *testing.T, ctx context.Context, client *Client) string {
 	skipIfNoCreds(t)
 
 	bucket := fmt.Sprintf("test-bucket-%d", time.Now().UnixNano())
-	_, err := client.CreateBucket(ctx, bucket)
+	_, err := client.CreateBucket(ctx, bucket, WithEnableSnapshot())
 	if err != nil {
 		t.Fatalf("setupTestBucket: failed to create bucket %s: %v", bucket, err)
 	}
-	return bucket
-}
 
-// cleanupTestBucket deletes a bucket after testing.
-// Logs errors instead of failing, to avoid masking test failures.
-func cleanupTestBucket(t *testing.T, ctx context.Context, client *Client, bucket string) {
-	t.Helper()
-	err := client.DeleteBucket(ctx, bucket)
-	if err != nil {
-		t.Logf("cleanupTestBucket: failed to delete bucket %s: %v", bucket, err)
-	}
+	t.Cleanup(func() {
+		err := client.DeleteBucket(context.Background(), bucket, func(bo *BucketOptions) {
+			bo.S3Options = append(bo.S3Options, tigrisheaders.WithHeader("Tigris-Force-Delete", "true"))
+		})
+		if err != nil {
+			t.Logf("cleanupTestBucket: failed to delete bucket %s: %v", bucket, err)
+		}
+	})
+
+	return bucket
 }
 
 func TestCreateBucket(t *testing.T) {
@@ -75,12 +77,9 @@ func TestCreateBucket(t *testing.T) {
 			}
 			defer cleanup()
 
-			// Create a client (use a dummy bucket for object operations)
-			os.Setenv("TIGRIS_STORAGE_BUCKET", "dummy-bucket")
-			defer os.Unsetenv("TIGRIS_STORAGE_BUCKET")
-
 			client, err := New(context.Background(),
 				WithEndpoint("https://test.endpoint.dev"),
+				WithBucket("xxx-dummy-bucket"),
 			)
 			if err != nil {
 				t.Fatalf("New() failed: %v", err)
@@ -131,12 +130,9 @@ func TestDeleteBucket(t *testing.T) {
 			}
 			defer cleanup()
 
-			// Create a client
-			os.Setenv("TIGRIS_STORAGE_BUCKET", "dummy-bucket")
-			defer os.Unsetenv("TIGRIS_STORAGE_BUCKET")
-
 			client, err := New(context.Background(),
 				WithEndpoint("https://test.endpoint.dev"),
+				WithBucket("xxx-dummy-bucket"),
 			)
 			if err != nil {
 				t.Fatalf("New() failed: %v", err)
@@ -182,20 +178,23 @@ func TestListBuckets(t *testing.T) {
 			cleanup := tt.setupEnv
 			defer cleanup()
 
-			// Create a client
-			os.Setenv("TIGRIS_STORAGE_BUCKET", "dummy-bucket")
-			defer os.Unsetenv("TIGRIS_STORAGE_BUCKET")
-
 			client, err := New(context.Background(),
 				WithEndpoint("https://test.endpoint.dev"),
+				WithBucket("xxx-dummy-bucket"),
 			)
 			if err != nil {
 				t.Fatalf("New() failed: %v", err)
 			}
 
-			_, err = client.ListBuckets(context.Background())
+			var iterErr error
+			for _, err := range client.Buckets(context.Background()) {
+				if err != nil {
+					iterErr = err
+					break
+				}
+			}
 
-			if tt.wantErr && err == nil {
+			if tt.wantErr && iterErr == nil {
 				t.Errorf("ListBuckets() expected error, got nil")
 			}
 		})
@@ -233,7 +232,7 @@ func TestGetBucketInfo(t *testing.T) {
 				t.Fatalf("New() failed: %v", err)
 			}
 
-			_, err = client.GetBucketInfo(context.Background(), tt.bucket)
+			_, err = client.Info(context.Background(), tt.bucket)
 
 			if tt.wantErr && err == nil {
 				t.Errorf("GetBucketInfo() expected error, got nil")
@@ -363,45 +362,10 @@ func TestCreateBucketSnapshot(t *testing.T) {
 				t.Fatalf("New() failed: %v", err)
 			}
 
-			_, err = client.CreateBucketSnapshot(context.Background(), tt.bucket, tt.description)
+			_, err = client.Snapshot(context.Background(), tt.bucket, tt.description)
 
 			if tt.wantErr && err == nil {
 				t.Errorf("CreateBucketSnapshot() expected error, got nil")
-			}
-		})
-	}
-}
-
-func TestListBucketSnapshots(t *testing.T) {
-	tests := []struct {
-		name    string
-		bucket  string
-		wantErr bool
-	}{
-		{
-			name:    "empty bucket name returns error",
-			bucket:  "",
-			wantErr: true,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			// Create a client
-			os.Setenv("TIGRIS_STORAGE_BUCKET", "dummy-bucket")
-			defer os.Unsetenv("TIGRIS_STORAGE_BUCKET")
-
-			client, err := New(context.Background(),
-				WithEndpoint("https://test.endpoint.dev"),
-			)
-			if err != nil {
-				t.Fatalf("New() failed: %v", err)
-			}
-
-			_, err = client.ListBucketSnapshots(context.Background(), tt.bucket)
-
-			if tt.wantErr && err == nil {
-				t.Errorf("ListBucketSnapshots() expected error, got nil")
 			}
 		})
 	}
@@ -466,14 +430,71 @@ func TestBucketLifecycle_integration(t *testing.T) {
 
 	// Use setupTestBucket to verify the helper works
 	bucket := setupTestBucket(t, ctx, client)
-	defer cleanupTestBucket(t, ctx, client, bucket)
 
 	// Verify bucket was created
-	info, err := client.GetBucketInfo(ctx, bucket)
+	info, err := client.Info(ctx, bucket)
 	if err != nil {
 		t.Errorf("GetBucketInfo() failed: %v", err)
 	}
 	if info.Name != bucket {
 		t.Errorf("GetBucketInfo() returned bucket name %s, want %s", info.Name, bucket)
 	}
+}
+
+func TestBucketSnapshotList(t *testing.T) {
+	skipIfNoCreds(t)
+	ctx := t.Context()
+
+	client, err := New(ctx, WithBucket("xxx-foo-test"))
+	if err != nil {
+		t.Fatalf("New() failed: %v", err)
+	}
+
+	bucket := setupTestBucket(t, ctx, client)
+	client = client.For(bucket)
+
+	snapshotName := t.Name()
+	sn, err := client.Snapshot(ctx, bucket, snapshotName)
+	if err != nil {
+		t.Fatalf("CreateBucketSnapshot(%q, %q) failed: %v", bucket, snapshotName, err)
+	}
+
+	snaps, err := collect(client.Snapshots(ctx, bucket))
+	if err != nil {
+		t.Fatalf("ListBucketSnapshots(%q) failed: %v", bucket, err)
+	}
+
+	if len(snaps) != 1 {
+		t.Errorf("wanted len(snaps) == 1 but got: %d", len(snaps))
+	}
+
+	gotSN := snaps[0]
+
+	if gotSN.Version != sn.Version {
+		t.Errorf("wanted snapshot version %s but got: %s", sn.Version, gotSN.Version)
+	}
+
+	if gotSN.Name != sn.Name {
+		t.Errorf("wanted snapshot name %q but got: %q", sn.Name, gotSN.Name)
+	}
+}
+
+func collect[T any](i iter.Seq2[T, error]) ([]T, error) {
+	var result []T
+	var errs []error
+
+	for item, err := range i {
+		if err != nil {
+			errs = append(errs, err)
+			continue
+		}
+
+		result = append(result, item)
+	}
+
+	if len(errs) != 0 {
+		return nil, errors.Join(errs...)
+	}
+
+	return result, nil
 }
