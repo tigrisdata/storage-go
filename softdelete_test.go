@@ -116,6 +116,9 @@ func TestListSoftDeletedObjects_Validation(t *testing.T) {
 	if _, err := cli.ListSoftDeletedObjects(context.Background(), &ListSoftDeletedObjectsInput{}); !errors.Is(err, ErrMissingBucket) {
 		t.Fatalf("err = %v, want ErrMissingBucket", err)
 	}
+	if _, err := cli.ListSoftDeletedObjects(context.Background(), nil); !errors.Is(err, ErrMissingBucket) {
+		t.Fatalf("nil input err = %v, want ErrMissingBucket", err)
+	}
 }
 
 func TestRestoreSoftDeletedObject_RequestConstruction(t *testing.T) {

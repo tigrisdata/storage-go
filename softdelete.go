@@ -193,7 +193,7 @@ type deleteMarkerEntry struct {
 //
 // [1]: https://www.tigrisdata.com/docs/buckets/soft-delete/
 func (c *Client) ListSoftDeletedObjects(ctx context.Context, in *ListSoftDeletedObjectsInput) (*ListSoftDeletedObjectsOutput, error) {
-	if in.Bucket == "" {
+	if in == nil || in.Bucket == "" {
 		return nil, fmt.Errorf("storage: ListSoftDeletedObjects: %w", ErrMissingBucket)
 	}
 
