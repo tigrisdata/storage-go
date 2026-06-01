@@ -24,6 +24,8 @@ func TestHeaderFunctionsAreValid(t *testing.T) {
 		{"WithUnmodifiedSince", func(o *s3.Options) { WithUnmodifiedSince(time.Now())(o) }},
 		{"WithCompareAndSwap", func(o *s3.Options) { WithCompareAndSwap()(o) }},
 		{"WithEnableSnapshot", func(o *s3.Options) { WithEnableSnapshot()(o) }},
+		{"WithSoftDelete", func(o *s3.Options) { WithSoftDelete()(o) }},
+		{"WithSoftDeleteCustom", func(o *s3.Options) { WithSoftDelete(30)(o) }},
 		{"WithTakeSnapshot", func(o *s3.Options) { WithTakeSnapshot("test")(o) }},
 		{"WithSnapshotVersion", func(o *s3.Options) { WithSnapshotVersion("v1")(o) }},
 		{"WithRename", func(o *s3.Options) { WithRename()(o) }},
@@ -302,6 +304,29 @@ func TestWithSnapshotVersion_variousInputs(t *testing.T) {
 
 			if len(opts.APIOptions) == 0 {
 				t.Error("WithSnapshotVersion() did not add any APIOptions")
+			}
+		})
+	}
+}
+
+func TestWithSoftDelete_variousInputs(t *testing.T) {
+	tests := []struct {
+		name string
+		days []int
+	}{
+		{"default window", nil},
+		{"minimum window", []int{7}},
+		{"custom window", []int{30}},
+		{"maximum window", []int{90}},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			opts := &s3.Options{}
+			WithSoftDelete(tt.days...)(opts)
+
+			if len(opts.APIOptions) == 0 {
+				t.Error("WithSoftDelete() did not add any APIOptions")
 			}
 		})
 	}
