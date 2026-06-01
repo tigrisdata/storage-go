@@ -129,6 +129,8 @@ func TestRestoreSoftDeletedObject_RequestConstruction(t *testing.T) {
 		{"latest", "my-key", "", "/my-bucket/my-key", ""},
 		{"specific version", "my-key", "1775929768707198086", "/my-bucket/my-key", "1775929768707198086"},
 		{"key with slash and space", "folder/my file.txt", "", "/my-bucket/folder/my file.txt", ""},
+		{"key with percent", "100%done.txt", "", "/my-bucket/100%done.txt", ""},
+		{"key with reserved chars", "weird?#&.txt", "", "/my-bucket/weird?#&.txt", ""},
 	}
 
 	for _, tt := range tests {

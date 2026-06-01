@@ -90,6 +90,10 @@ func (c *Client) ForceDeleteBucket(ctx context.Context, in *s3.DeleteBucketInput
 // latest version and create a new soft-delete marker rather than purging a
 // version, the opposite of this method's intent.
 //
+// This is a dangerous operation. Do not use this unless you are aware of
+// the consequences of your actions. Support will not be able to help you
+// recover any buckets or objects deleted in this way.
+//
 // See the Tigris documentation[1] for more information.
 //
 // [1]: https://www.tigrisdata.com/docs/buckets/soft-delete/
@@ -408,8 +412,13 @@ func (c *Client) bucketURL(bucket, rawQuery string) string {
 	return c.baseEndpoint() + "/" + bucket + queryString(rawQuery)
 }
 
-// objectURL builds a path-style URL for an object, escaping the key so the
-// signed canonical URI matches the request that is sent.
+// objectURL builds a path-style URL for an object.
+//
+// The key is assigned to url.URL.Path in its decoded form; url.URL.String
+// percent-encodes it on serialization (including %, ?, and #) while preserving
+// "/" as path separators, so the URL sent matches the SigV4 canonical URI and
+// arbitrary keys round-trip correctly. url.PathEscape is deliberately not used:
+// it would encode "/" separators and corrupt multi-segment keys.
 func (c *Client) objectURL(bucket, key, rawQuery string) string {
 	u, err := url.Parse(c.baseEndpoint())
 	if err != nil {
