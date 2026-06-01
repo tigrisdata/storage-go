@@ -148,7 +148,11 @@ func TestRestoreSoftDeletedObject_RequestConstruction(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			if err := cli.RestoreSoftDeletedObject(context.Background(), "my-bucket", tt.key, tt.versionID); err != nil {
+			if _, err := cli.RestoreSoftDeletedObject(context.Background(), &RestoreSoftDeletedObjectInput{
+				Bucket:    "my-bucket",
+				Key:       tt.key,
+				VersionID: tt.versionID,
+			}); err != nil {
 				t.Fatal(err)
 			}
 
@@ -176,10 +180,10 @@ func TestRestoreSoftDeletedObject_RequestConstruction(t *testing.T) {
 
 func TestRestoreSoftDeletedObject_Validation(t *testing.T) {
 	cli := &Client{}
-	if err := cli.RestoreSoftDeletedObject(context.Background(), "", "key", ""); !errors.Is(err, ErrMissingBucket) {
+	if _, err := cli.RestoreSoftDeletedObject(context.Background(), &RestoreSoftDeletedObjectInput{Key: "key"}); !errors.Is(err, ErrMissingBucket) {
 		t.Errorf("err = %v, want ErrMissingBucket", err)
 	}
-	if err := cli.RestoreSoftDeletedObject(context.Background(), "bucket", "", ""); !errors.Is(err, ErrMissingKey) {
+	if _, err := cli.RestoreSoftDeletedObject(context.Background(), &RestoreSoftDeletedObjectInput{Bucket: "bucket"}); !errors.Is(err, ErrMissingKey) {
 		t.Errorf("err = %v, want ErrMissingKey", err)
 	}
 }
@@ -213,7 +217,7 @@ func TestRestoreBucket_RequestConstruction(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if err := cli.RestoreBucket(context.Background(), "my-bucket"); err != nil {
+	if _, err := cli.RestoreBucket(context.Background(), &RestoreBucketInput{Bucket: "my-bucket"}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -263,7 +267,11 @@ func TestSetBucketSoftDelete_RequestConstruction(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			if err := cli.SetBucketSoftDelete(context.Background(), "my-bucket", tt.enabled, tt.retentionDays); err != nil {
+			if _, err := cli.SetBucketSoftDelete(context.Background(), &SetBucketSoftDeleteInput{
+				Bucket:        "my-bucket",
+				Enabled:       tt.enabled,
+				RetentionDays: tt.retentionDays,
+			}); err != nil {
 				t.Fatal(err)
 			}
 
@@ -302,7 +310,7 @@ func TestSetBucketSoftDelete_RequestConstruction(t *testing.T) {
 
 func TestSetBucketSoftDelete_Validation(t *testing.T) {
 	cli := &Client{}
-	if err := cli.SetBucketSoftDelete(context.Background(), "", true, 0); !errors.Is(err, ErrMissingBucket) {
+	if _, err := cli.SetBucketSoftDelete(context.Background(), &SetBucketSoftDeleteInput{Enabled: true}); !errors.Is(err, ErrMissingBucket) {
 		t.Errorf("err = %v, want ErrMissingBucket", err)
 	}
 }
@@ -401,9 +409,12 @@ func TestCreateBucketWithSoftDelete_RequestConstruction(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			if _, err := cli.CreateBucketWithSoftDelete(context.Background(), &s3.CreateBucketInput{
-				Bucket: aws.String("my-bucket"),
-			}, tt.retentionDays); err != nil {
+			if _, err := cli.CreateBucketWithSoftDelete(context.Background(), &CreateBucketWithSoftDeleteInput{
+				CreateBucketInput: &s3.CreateBucketInput{
+					Bucket: aws.String("my-bucket"),
+				},
+				RetentionDays: tt.retentionDays,
+			}); err != nil {
 				t.Fatal(err)
 			}
 
@@ -432,7 +443,7 @@ func TestRestoreBucket_HTTPError(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if err := cli.RestoreBucket(context.Background(), "my-bucket"); err == nil {
+	if _, err := cli.RestoreBucket(context.Background(), &RestoreBucketInput{Bucket: "my-bucket"}); err == nil {
 		t.Fatal("expected error for HTTP 404")
 	}
 }
@@ -477,9 +488,12 @@ func TestSoftDeleteLifecycle_integration(t *testing.T) {
 
 	bucket := "storage-go-softdelete-test-" + strconv.FormatInt(time.Now().UnixNano(), 36)
 
-	if _, err := cli.CreateBucketWithSoftDelete(ctx, &s3.CreateBucketInput{
-		Bucket: aws.String(bucket),
-	}, 7); err != nil {
+	if _, err := cli.CreateBucketWithSoftDelete(ctx, &CreateBucketWithSoftDeleteInput{
+		CreateBucketInput: &s3.CreateBucketInput{
+			Bucket: aws.String(bucket),
+		},
+		RetentionDays: 7,
+	}); err != nil {
 		t.Fatalf("CreateBucketWithSoftDelete: %v", err)
 	}
 	t.Cleanup(func() {
@@ -516,7 +530,10 @@ func TestSoftDeleteLifecycle_integration(t *testing.T) {
 		t.Errorf("soft-deleted object %q not found in listing: %+v", key, listed.Objects)
 	}
 
-	if err := cli.RestoreSoftDeletedObject(ctx, bucket, key, ""); err != nil {
+	if _, err := cli.RestoreSoftDeletedObject(ctx, &RestoreSoftDeletedObjectInput{
+		Bucket: bucket,
+		Key:    key,
+	}); err != nil {
 		t.Fatalf("RestoreSoftDeletedObject: %v", err)
 	}
 }

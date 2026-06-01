@@ -153,17 +153,22 @@ func ExampleClient_CreateBucketWithSoftDelete() {
 	}
 
 	// Create a bucket with the default 7-day soft delete retention window.
-	_, err = client.CreateBucketWithSoftDelete(ctx, &s3.CreateBucketInput{
-		Bucket: aws.String("my-bucket"),
-	}, 0)
+	_, err = client.CreateBucketWithSoftDelete(ctx, &storage.CreateBucketWithSoftDeleteInput{
+		CreateBucketInput: &s3.CreateBucketInput{
+			Bucket: aws.String("my-bucket"),
+		},
+	})
 	if err != nil {
 		log.Fatal(err) // handle the error here
 	}
 
 	// Create a bucket with a custom 30-day retention window.
-	_, err = client.CreateBucketWithSoftDelete(ctx, &s3.CreateBucketInput{
-		Bucket: aws.String("my-other-bucket"),
-	}, 30)
+	_, err = client.CreateBucketWithSoftDelete(ctx, &storage.CreateBucketWithSoftDeleteInput{
+		CreateBucketInput: &s3.CreateBucketInput{
+			Bucket: aws.String("my-other-bucket"),
+		},
+		RetentionDays: 30,
+	})
 	if err != nil {
 		log.Fatal(err) // handle the error here
 	}
@@ -178,12 +183,21 @@ func ExampleClient_SetBucketSoftDelete() {
 	}
 
 	// Enable soft delete on an existing bucket with a 30-day retention window.
-	if err := client.SetBucketSoftDelete(ctx, "my-bucket", true, 30); err != nil {
+	_, err = client.SetBucketSoftDelete(ctx, &storage.SetBucketSoftDeleteInput{
+		Bucket:        "my-bucket",
+		Enabled:       true,
+		RetentionDays: 30,
+	})
+	if err != nil {
 		log.Fatal(err) // handle the error here
 	}
 
 	// Disable soft delete on an existing bucket.
-	if err := client.SetBucketSoftDelete(ctx, "my-bucket", false, 0); err != nil {
+	_, err = client.SetBucketSoftDelete(ctx, &storage.SetBucketSoftDeleteInput{
+		Bucket:  "my-bucket",
+		Enabled: false,
+	})
+	if err != nil {
 		log.Fatal(err) // handle the error here
 	}
 }
@@ -221,12 +235,21 @@ func ExampleClient_RestoreSoftDeletedObject() {
 	}
 
 	// Restore the most recent soft-deleted version of an object.
-	if err := client.RestoreSoftDeletedObject(ctx, "my-bucket", "my-key", ""); err != nil {
+	_, err = client.RestoreSoftDeletedObject(ctx, &storage.RestoreSoftDeletedObjectInput{
+		Bucket: "my-bucket",
+		Key:    "my-key",
+	})
+	if err != nil {
 		log.Fatal(err) // handle the error here
 	}
 
 	// Restore a specific soft-deleted version.
-	if err := client.RestoreSoftDeletedObject(ctx, "my-bucket", "my-key", "1775929768707198086"); err != nil {
+	_, err = client.RestoreSoftDeletedObject(ctx, &storage.RestoreSoftDeletedObjectInput{
+		Bucket:    "my-bucket",
+		Key:       "my-key",
+		VersionID: "1775929768707198086",
+	})
+	if err != nil {
 		log.Fatal(err) // handle the error here
 	}
 }
@@ -258,7 +281,10 @@ func ExampleClient_RestoreBucket() {
 	}
 
 	// Restore a soft-deleted bucket before its retention window expires.
-	if err := client.RestoreBucket(ctx, "my-bucket"); err != nil {
+	_, err = client.RestoreBucket(ctx, &storage.RestoreBucketInput{
+		Bucket: "my-bucket",
+	})
+	if err != nil {
 		log.Fatal(err) // handle the error here
 	}
 }

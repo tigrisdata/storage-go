@@ -29,25 +29,36 @@ var (
 	ErrMissingVersionID = errors.New("version ID is required")
 )
 
+// CreateBucketWithSoftDeleteInput is the input for a CreateBucketWithSoftDelete request.
+type CreateBucketWithSoftDeleteInput struct {
+	// CreateBucketInput carries the standard S3 create-bucket parameters. Required.
+	*s3.CreateBucketInput
+
+	// RetentionDays sets the soft delete retention window in days. Use 0 for the
+	// default 7-day window, or a value between 7 and 90 for a custom window.
+	// Values outside the 7-90 range are rejected by the server.
+	RetentionDays int
+}
+
 // CreateBucketWithSoftDelete creates a bucket with soft delete enabled. Deleting
 // an object or the bucket then moves it into a recoverable soft-deleted state for
 // the retention window instead of removing it immediately.
 //
-// Pass retentionDays as 0 to use the default 7-day window, or a value between 7
-// and 90 to set a custom window. Values outside the 7-90 range are rejected by
-// the server.
-//
 // See the Tigris documentation[1] for more information.
 //
 // [1]: https://www.tigrisdata.com/docs/buckets/soft-delete/
-func (c *Client) CreateBucketWithSoftDelete(ctx context.Context, in *s3.CreateBucketInput, retentionDays int, opts ...func(*s3.Options)) (*s3.CreateBucketOutput, error) {
-	if retentionDays > 0 {
-		opts = append(opts, tigrisheaders.WithSoftDelete(retentionDays))
-	} else {
-		opts = append(opts, tigrisheaders.WithSoftDelete())
+func (c *Client) CreateBucketWithSoftDelete(ctx context.Context, in *CreateBucketWithSoftDeleteInput, optFns ...func(*s3.Options)) (*s3.CreateBucketOutput, error) {
+	if in == nil || in.CreateBucketInput == nil {
+		return nil, fmt.Errorf("storage: CreateBucketWithSoftDelete: %w", ErrMissingBucket)
 	}
 
-	return c.Client.CreateBucket(ctx, in, opts...)
+	if in.RetentionDays > 0 {
+		optFns = append(optFns, tigrisheaders.WithSoftDelete(in.RetentionDays))
+	} else {
+		optFns = append(optFns, tigrisheaders.WithSoftDelete())
+	}
+
+	return c.Client.CreateBucket(ctx, in.CreateBucketInput, optFns...)
 }
 
 // ForceDeleteBucket deletes a bucket even when it is not empty.
@@ -245,44 +256,65 @@ func (c *Client) ListSoftDeletedObjects(ctx context.Context, in *ListSoftDeleted
 	return out, nil
 }
 
+// RestoreSoftDeletedObjectInput is the input for a RestoreSoftDeletedObject request.
+type RestoreSoftDeletedObjectInput struct {
+	// Bucket is the name of the bucket containing the object. Required.
+	Bucket string
+	// Key is the object key to restore. Required.
+	Key string
+	// VersionID restores a specific soft-deleted version, as returned by
+	// ListSoftDeletedObjects. Optional; empty restores the most recent
+	// soft-deleted version.
+	VersionID string
+}
+
+// RestoreSoftDeletedObjectOutput is the response from a RestoreSoftDeletedObject request.
+type RestoreSoftDeletedObjectOutput struct{}
+
 // RestoreSoftDeletedObject restores a soft-deleted object, undoing a delete
 // before its retention window expires.
-//
-// Pass an empty versionID to restore the most recent soft-deleted version, or a
-// specific VersionID from ListSoftDeletedObjects to restore that version.
 //
 // See the Tigris documentation[1] for more information.
 //
 // [1]: https://www.tigrisdata.com/docs/buckets/soft-delete/
-func (c *Client) RestoreSoftDeletedObject(ctx context.Context, bucket, key, versionID string) error {
-	if bucket == "" {
-		return fmt.Errorf("storage: RestoreSoftDeletedObject: %w", ErrMissingBucket)
+func (c *Client) RestoreSoftDeletedObject(ctx context.Context, in *RestoreSoftDeletedObjectInput) (*RestoreSoftDeletedObjectOutput, error) {
+	if in == nil || in.Bucket == "" {
+		return nil, fmt.Errorf("storage: RestoreSoftDeletedObject: %w", ErrMissingBucket)
 	}
-	if key == "" {
-		return fmt.Errorf("storage: RestoreSoftDeletedObject: %w", ErrMissingKey)
+	if in.Key == "" {
+		return nil, fmt.Errorf("storage: RestoreSoftDeletedObject: %w", ErrMissingKey)
 	}
 
 	headers := map[string]string{
 		"X-Tigris-Restore-Type": "soft-delete",
 	}
-	if versionID != "" {
-		headers["X-Tigris-Restore-Version"] = versionID
+	if in.VersionID != "" {
+		headers["X-Tigris-Restore-Version"] = in.VersionID
 	}
 
-	reqURL := c.objectURL(bucket, key, "restore")
+	reqURL := c.objectURL(in.Bucket, in.Key, "restore")
 
 	resp, err := c.doSignedRequest(ctx, http.MethodPost, reqURL, headers, nil)
 	if err != nil {
-		return fmt.Errorf("storage: RestoreSoftDeletedObject: request failed: %w", err)
+		return nil, fmt.Errorf("storage: RestoreSoftDeletedObject: request failed: %w", err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode >= 400 {
-		return httpError(resp, "RestoreSoftDeletedObject")
+		return nil, httpError(resp, "RestoreSoftDeletedObject")
 	}
 
-	return nil
+	return &RestoreSoftDeletedObjectOutput{}, nil
 }
+
+// RestoreBucketInput is the input for a RestoreBucket request.
+type RestoreBucketInput struct {
+	// Bucket is the name of the soft-deleted bucket to restore. Required.
+	Bucket string
+}
+
+// RestoreBucketOutput is the response from a RestoreBucket request.
+type RestoreBucketOutput struct{}
 
 // RestoreBucket restores a soft-deleted bucket, recovering it and its contents
 // before the retention window expires.
@@ -290,24 +322,24 @@ func (c *Client) RestoreSoftDeletedObject(ctx context.Context, bucket, key, vers
 // See the Tigris documentation[1] for more information.
 //
 // [1]: https://www.tigrisdata.com/docs/buckets/soft-delete/
-func (c *Client) RestoreBucket(ctx context.Context, bucket string) error {
-	if bucket == "" {
-		return fmt.Errorf("storage: RestoreBucket: %w", ErrMissingBucket)
+func (c *Client) RestoreBucket(ctx context.Context, in *RestoreBucketInput) (*RestoreBucketOutput, error) {
+	if in == nil || in.Bucket == "" {
+		return nil, fmt.Errorf("storage: RestoreBucket: %w", ErrMissingBucket)
 	}
 
-	reqURL := c.bucketURL(bucket, "restore")
+	reqURL := c.bucketURL(in.Bucket, "restore")
 
 	resp, err := c.doSignedRequest(ctx, http.MethodPost, reqURL, nil, nil)
 	if err != nil {
-		return fmt.Errorf("storage: RestoreBucket: request failed: %w", err)
+		return nil, fmt.Errorf("storage: RestoreBucket: request failed: %w", err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode >= 400 {
-		return httpError(resp, "RestoreBucket")
+		return nil, httpError(resp, "RestoreBucket")
 	}
 
-	return nil
+	return &RestoreBucketOutput{}, nil
 }
 
 type softDeleteConfig struct {
@@ -319,45 +351,56 @@ type patchBucketBody struct {
 	SoftDelete softDeleteConfig `json:"soft_delete"`
 }
 
+// SetBucketSoftDeleteInput is the input for a SetBucketSoftDelete request.
+type SetBucketSoftDeleteInput struct {
+	// Bucket is the name of the bucket to configure. Required.
+	Bucket string
+	// Enabled turns soft delete on or off for the bucket.
+	Enabled bool
+	// RetentionDays sets the soft delete retention window in days when enabling.
+	// Use 0 for the default 7-day window, or a value between 7 and 90 for a custom
+	// window. Ignored when disabling.
+	RetentionDays int
+}
+
+// SetBucketSoftDeleteOutput is the response from a SetBucketSoftDelete request.
+type SetBucketSoftDeleteOutput struct{}
+
 // SetBucketSoftDelete enables or disables soft delete on an existing bucket.
-//
-// When enabling, pass retentionDays as 0 to use the default 7-day window, or a
-// value between 7 and 90 for a custom window. retentionDays is ignored when
-// disabling.
 //
 // See the Tigris documentation[1] for more information.
 //
 // [1]: https://www.tigrisdata.com/docs/buckets/soft-delete/
-func (c *Client) SetBucketSoftDelete(ctx context.Context, bucket string, enabled bool, retentionDays int) error {
-	if bucket == "" {
-		return fmt.Errorf("storage: SetBucketSoftDelete: %w", ErrMissingBucket)
+func (c *Client) SetBucketSoftDelete(ctx context.Context, in *SetBucketSoftDeleteInput) (*SetBucketSoftDeleteOutput, error) {
+	if in == nil || in.Bucket == "" {
+		return nil, fmt.Errorf("storage: SetBucketSoftDelete: %w", ErrMissingBucket)
 	}
 
-	cfg := softDeleteConfig{Enabled: enabled}
-	if enabled && retentionDays > 0 {
-		cfg.RetentionDays = retentionDays
+	cfg := softDeleteConfig{Enabled: in.Enabled}
+	if in.Enabled && in.RetentionDays > 0 {
+		cfg.RetentionDays = in.RetentionDays
 	}
 
 	body, err := json.Marshal(patchBucketBody{SoftDelete: cfg})
 	if err != nil {
-		return fmt.Errorf("storage: SetBucketSoftDelete: failed to marshal body: %w", err)
+		return nil, fmt.Errorf("storage: SetBucketSoftDelete: failed to marshal body: %w", err)
 	}
 
-	reqURL := c.bucketURL(bucket, "")
+	reqURL := c.bucketURL(in.Bucket, "")
 
 	resp, err := c.doSignedRequest(ctx, http.MethodPatch, reqURL, map[string]string{
 		"Content-Type": "application/json",
 	}, body)
 	if err != nil {
-		return fmt.Errorf("storage: SetBucketSoftDelete: request failed: %w", err)
+		return nil, fmt.Errorf("storage: SetBucketSoftDelete: request failed: %w", err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode >= 400 {
-		return httpError(resp, "SetBucketSoftDelete")
+		return nil, httpError(resp, "SetBucketSoftDelete")
 	}
 
-	return nil
+	return &SetBucketSoftDeleteOutput{}, nil
 }
 
 // bucketURL builds a path-style URL for a bucket, with an optional raw query.
