@@ -3,6 +3,7 @@ package storage
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -112,8 +113,8 @@ func TestListSoftDeletedObjects_RequestAndParse(t *testing.T) {
 
 func TestListSoftDeletedObjects_Validation(t *testing.T) {
 	cli := &Client{}
-	if _, err := cli.ListSoftDeletedObjects(context.Background(), &ListSoftDeletedObjectsInput{}); err == nil {
-		t.Fatal("expected error for missing bucket")
+	if _, err := cli.ListSoftDeletedObjects(context.Background(), &ListSoftDeletedObjectsInput{}); !errors.Is(err, ErrMissingBucket) {
+		t.Fatalf("err = %v, want ErrMissingBucket", err)
 	}
 }
 
@@ -175,11 +176,24 @@ func TestRestoreSoftDeletedObject_RequestConstruction(t *testing.T) {
 
 func TestRestoreSoftDeletedObject_Validation(t *testing.T) {
 	cli := &Client{}
-	if err := cli.RestoreSoftDeletedObject(context.Background(), "", "key", ""); err == nil {
-		t.Error("expected error for missing bucket")
+	if err := cli.RestoreSoftDeletedObject(context.Background(), "", "key", ""); !errors.Is(err, ErrMissingBucket) {
+		t.Errorf("err = %v, want ErrMissingBucket", err)
 	}
-	if err := cli.RestoreSoftDeletedObject(context.Background(), "bucket", "", ""); err == nil {
-		t.Error("expected error for missing key")
+	if err := cli.RestoreSoftDeletedObject(context.Background(), "bucket", "", ""); !errors.Is(err, ErrMissingKey) {
+		t.Errorf("err = %v, want ErrMissingKey", err)
+	}
+}
+
+func TestPermanentlyDeleteObject_Validation(t *testing.T) {
+	cli := &Client{}
+	if _, err := cli.PermanentlyDeleteObject(context.Background(), "", "key", "v1"); !errors.Is(err, ErrMissingBucket) {
+		t.Errorf("err = %v, want ErrMissingBucket", err)
+	}
+	if _, err := cli.PermanentlyDeleteObject(context.Background(), "bucket", "", "v1"); !errors.Is(err, ErrMissingKey) {
+		t.Errorf("err = %v, want ErrMissingKey", err)
+	}
+	if _, err := cli.PermanentlyDeleteObject(context.Background(), "bucket", "key", ""); !errors.Is(err, ErrMissingVersionID) {
+		t.Errorf("err = %v, want ErrMissingVersionID", err)
 	}
 }
 
@@ -288,8 +302,8 @@ func TestSetBucketSoftDelete_RequestConstruction(t *testing.T) {
 
 func TestSetBucketSoftDelete_Validation(t *testing.T) {
 	cli := &Client{}
-	if err := cli.SetBucketSoftDelete(context.Background(), "", true, 0); err == nil {
-		t.Error("expected error for missing bucket")
+	if err := cli.SetBucketSoftDelete(context.Background(), "", true, 0); !errors.Is(err, ErrMissingBucket) {
+		t.Errorf("err = %v, want ErrMissingBucket", err)
 	}
 }
 

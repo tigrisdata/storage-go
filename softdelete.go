@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"encoding/xml"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -15,6 +16,17 @@ import (
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/tigrisdata/storage-go/tigrisheaders"
+)
+
+// Sentinel errors returned when a required argument is missing. They are wrapped
+// with the calling method's name, so callers can match them with errors.Is.
+var (
+	// ErrMissingBucket is returned when a required bucket name is empty.
+	ErrMissingBucket = errors.New("bucket is required")
+	// ErrMissingKey is returned when a required object key is empty.
+	ErrMissingKey = errors.New("key is required")
+	// ErrMissingVersionID is returned when a required version ID is empty.
+	ErrMissingVersionID = errors.New("version ID is required")
 )
 
 // CreateBucketWithSoftDelete creates a bucket with soft delete enabled. Deleting
@@ -45,6 +57,10 @@ func (c *Client) CreateBucketWithSoftDelete(ctx context.Context, in *s3.CreateBu
 // removed; use RestoreBucket to recover it. Otherwise the bucket and its
 // contents are permanently deleted.
 //
+// This is a dangerous operation. Do not use this unless you are aware of
+// the consequences of your actions. Support will not be able to help you
+// recover any buckets or objects deleted in this way.
+//
 // See the Tigris documentation[1] for more information.
 //
 // [1]: https://www.tigrisdata.com/docs/buckets/soft-delete/
@@ -59,12 +75,24 @@ func (c *Client) ForceDeleteBucket(ctx context.Context, in *s3.DeleteBucketInput
 // cannot be restored afterwards.
 //
 // versionID identifies the soft-deleted version to purge, as returned by
-// ListSoftDeletedObjects.
+// ListSoftDeletedObjects, and is required: an empty versionID would target the
+// latest version and create a new soft-delete marker rather than purging a
+// version, the opposite of this method's intent.
 //
 // See the Tigris documentation[1] for more information.
 //
 // [1]: https://www.tigrisdata.com/docs/buckets/soft-delete/
 func (c *Client) PermanentlyDeleteObject(ctx context.Context, bucket, key, versionID string, opts ...func(*s3.Options)) (*s3.DeleteObjectOutput, error) {
+	if bucket == "" {
+		return nil, fmt.Errorf("storage: PermanentlyDeleteObject: %w", ErrMissingBucket)
+	}
+	if key == "" {
+		return nil, fmt.Errorf("storage: PermanentlyDeleteObject: %w", ErrMissingKey)
+	}
+	if versionID == "" {
+		return nil, fmt.Errorf("storage: PermanentlyDeleteObject: %w", ErrMissingVersionID)
+	}
+
 	opts = append(opts, tigrisheaders.WithHeader("X-Tigris-Soft-Delete", "true"))
 
 	return c.Client.DeleteObject(ctx, &s3.DeleteObjectInput{
@@ -151,7 +179,7 @@ type deleteMarkerEntry struct {
 // [1]: https://www.tigrisdata.com/docs/buckets/soft-delete/
 func (c *Client) ListSoftDeletedObjects(ctx context.Context, in *ListSoftDeletedObjectsInput) (*ListSoftDeletedObjectsOutput, error) {
 	if in.Bucket == "" {
-		return nil, fmt.Errorf("storage: ListSoftDeletedObjects: bucket is required")
+		return nil, fmt.Errorf("storage: ListSoftDeletedObjects: %w", ErrMissingBucket)
 	}
 
 	q := url.Values{}
@@ -228,10 +256,10 @@ func (c *Client) ListSoftDeletedObjects(ctx context.Context, in *ListSoftDeleted
 // [1]: https://www.tigrisdata.com/docs/buckets/soft-delete/
 func (c *Client) RestoreSoftDeletedObject(ctx context.Context, bucket, key, versionID string) error {
 	if bucket == "" {
-		return fmt.Errorf("storage: RestoreSoftDeletedObject: bucket is required")
+		return fmt.Errorf("storage: RestoreSoftDeletedObject: %w", ErrMissingBucket)
 	}
 	if key == "" {
-		return fmt.Errorf("storage: RestoreSoftDeletedObject: key is required")
+		return fmt.Errorf("storage: RestoreSoftDeletedObject: %w", ErrMissingKey)
 	}
 
 	headers := map[string]string{
@@ -264,7 +292,7 @@ func (c *Client) RestoreSoftDeletedObject(ctx context.Context, bucket, key, vers
 // [1]: https://www.tigrisdata.com/docs/buckets/soft-delete/
 func (c *Client) RestoreBucket(ctx context.Context, bucket string) error {
 	if bucket == "" {
-		return fmt.Errorf("storage: RestoreBucket: bucket is required")
+		return fmt.Errorf("storage: RestoreBucket: %w", ErrMissingBucket)
 	}
 
 	reqURL := c.bucketURL(bucket, "restore")
@@ -302,7 +330,7 @@ type patchBucketBody struct {
 // [1]: https://www.tigrisdata.com/docs/buckets/soft-delete/
 func (c *Client) SetBucketSoftDelete(ctx context.Context, bucket string, enabled bool, retentionDays int) error {
 	if bucket == "" {
-		return fmt.Errorf("storage: SetBucketSoftDelete: bucket is required")
+		return fmt.Errorf("storage: SetBucketSoftDelete: %w", ErrMissingBucket)
 	}
 
 	cfg := softDeleteConfig{Enabled: enabled}
