@@ -140,6 +140,19 @@ func WithSoftDelete(days ...int) func(*s3.Options) {
 	return WithHeader("X-Tigris-Soft-Delete", "true")
 }
 
+// WithForceDelete forces deletion of a bucket even when it is not empty.
+//
+// If the bucket has soft delete enabled, it is moved to a recoverable
+// soft-deleted state for the retention window instead of being permanently
+// removed. Otherwise the bucket and its contents are permanently deleted.
+//
+// See the Tigris documentation[1] for more information.
+//
+// [1]: https://www.tigrisdata.com/docs/buckets/soft-delete/
+func WithForceDelete() func(*s3.Options) {
+	return WithHeader("X-Tigris-Force-Delete", "true")
+}
+
 // WithStorageClass sets the storage class tier for buckets or objects.
 // Valid values: "STANDARD", "STANDARD_IA", "GLACIER", "GLACIER_IR"
 func WithStorageClass(storageClass string) func(*s3.Options) {

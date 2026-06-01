@@ -124,6 +124,17 @@ func ExampleWithSoftDelete() {
 	}
 }
 
+func ExampleWithForceDelete() {
+	// Delete a bucket even when it is not empty. If the bucket has soft delete
+	// enabled, it is moved to a recoverable soft-deleted state instead.
+	_, err := client.DeleteBucket(ctx, &s3.DeleteBucketInput{
+		Bucket: aws.String("my-bucket"),
+	}, tigrisheaders.WithForceDelete())
+	if err != nil {
+		log.Fatal(err)
+	}
+}
+
 func ExampleWithHeader() {
 	// Set arbitrary HTTP header on request
 	_, err := client.PutObject(ctx, &s3.PutObjectInput{},

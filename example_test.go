@@ -144,6 +144,125 @@ func ExampleClient_RenameObject() {
 	}
 }
 
+func ExampleClient_CreateBucketWithSoftDelete() {
+	ctx := context.Background()
+
+	client, err := storage.New(ctx)
+	if err != nil {
+		log.Fatal(err) // handle the error here
+	}
+
+	// Create a bucket with the default 7-day soft delete retention window.
+	_, err = client.CreateBucketWithSoftDelete(ctx, &s3.CreateBucketInput{
+		Bucket: aws.String("my-bucket"),
+	}, 0)
+	if err != nil {
+		log.Fatal(err) // handle the error here
+	}
+
+	// Create a bucket with a custom 30-day retention window.
+	_, err = client.CreateBucketWithSoftDelete(ctx, &s3.CreateBucketInput{
+		Bucket: aws.String("my-other-bucket"),
+	}, 30)
+	if err != nil {
+		log.Fatal(err) // handle the error here
+	}
+}
+
+func ExampleClient_SetBucketSoftDelete() {
+	ctx := context.Background()
+
+	client, err := storage.New(ctx)
+	if err != nil {
+		log.Fatal(err) // handle the error here
+	}
+
+	// Enable soft delete on an existing bucket with a 30-day retention window.
+	if err := client.SetBucketSoftDelete(ctx, "my-bucket", true, 30); err != nil {
+		log.Fatal(err) // handle the error here
+	}
+
+	// Disable soft delete on an existing bucket.
+	if err := client.SetBucketSoftDelete(ctx, "my-bucket", false, 0); err != nil {
+		log.Fatal(err) // handle the error here
+	}
+}
+
+func ExampleClient_ListSoftDeletedObjects() {
+	ctx := context.Background()
+
+	client, err := storage.New(ctx)
+	if err != nil {
+		log.Fatal(err) // handle the error here
+	}
+
+	// List the soft-deleted object versions in a bucket.
+	listed, err := client.ListSoftDeletedObjects(ctx, &storage.ListSoftDeletedObjectsInput{
+		Bucket: "my-bucket",
+	})
+	if err != nil {
+		log.Fatal(err) // handle the error here
+	}
+
+	for _, obj := range listed.Objects {
+		_ = obj.Key          // object key
+		_ = obj.VersionID    // version to restore or permanently delete
+		_ = obj.Size         // original size in bytes
+		_ = obj.LastModified // time the object was soft-deleted
+	}
+}
+
+func ExampleClient_RestoreSoftDeletedObject() {
+	ctx := context.Background()
+
+	client, err := storage.New(ctx)
+	if err != nil {
+		log.Fatal(err) // handle the error here
+	}
+
+	// Restore the most recent soft-deleted version of an object.
+	if err := client.RestoreSoftDeletedObject(ctx, "my-bucket", "my-key", ""); err != nil {
+		log.Fatal(err) // handle the error here
+	}
+
+	// Restore a specific soft-deleted version.
+	if err := client.RestoreSoftDeletedObject(ctx, "my-bucket", "my-key", "1775929768707198086"); err != nil {
+		log.Fatal(err) // handle the error here
+	}
+}
+
+func ExampleClient_ForceDeleteBucket() {
+	ctx := context.Background()
+
+	client, err := storage.New(ctx)
+	if err != nil {
+		log.Fatal(err) // handle the error here
+	}
+
+	// Delete a bucket even if it is not empty. If soft delete is enabled on the
+	// bucket, it becomes recoverable with RestoreBucket; otherwise it is removed.
+	_, err = client.ForceDeleteBucket(ctx, &s3.DeleteBucketInput{
+		Bucket: aws.String("my-bucket"),
+	})
+	if err != nil {
+		log.Fatal(err) // handle the error here
+	}
+}
+
+func ExampleClient_RestoreBucket() {
+	ctx := context.Background()
+
+	client, err := storage.New(ctx)
+	if err != nil {
+		log.Fatal(err) // handle the error here
+	}
+
+	// Restore a soft-deleted bucket before its retention window expires.
+	if err := client.RestoreBucket(ctx, "my-bucket"); err != nil {
+		log.Fatal(err) // handle the error here
+	}
+}
+
 func ExampleClient_BundleObjects() {
 	ctx := context.Background()
 

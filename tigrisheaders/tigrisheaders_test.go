@@ -332,6 +332,15 @@ func TestWithSoftDelete_variousInputs(t *testing.T) {
 	}
 }
 
+func TestWithForceDelete(t *testing.T) {
+	opts := &s3.Options{}
+	WithForceDelete()(opts)
+
+	if len(opts.APIOptions) == 0 {
+		t.Error("WithForceDelete() did not add any APIOptions")
+	}
+}
+
 func TestRegionConstants(t *testing.T) {
 	tests := []struct {
 		region Region
