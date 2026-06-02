@@ -1,3 +1,104 @@
+# [0.7.0](https://github.com/tigrisdata/storage-go/compare/v0.6.0...v0.7.0) (2026-06-02)
+
+- feat(simplestorage)!: achieve feature parity with TypeScript SDK ([#26](https://github.com/tigrisdata/storage-go/issues/26)) ([bb8c144](https://github.com/tigrisdata/storage-go/commit/bb8c144904087277f8b75be4d8d9bcada15ba6a9))
+- feat(simplestorage)!: support iterators ([#27](https://github.com/tigrisdata/storage-go/issues/27)) ([3f6dd42](https://github.com/tigrisdata/storage-go/commit/3f6dd4202a2f63a2f756f630030865a06dcbd92c))
+
+### BREAKING CHANGES
+
+- Client.List now takes ListOption rather than
+  ClientOption. The ClientOption helpers WithStartAfter, WithMaxKeys,
+  WithDelimiter, WithPrefix, and WithPaginationToken have been removed.
+  Migrate callers to the new ListOption equivalents; WithPaginationToken
+  is now WithContinueToken.
+
+Assisted-by: Claude Opus 4.7 via Claude Code
+Signed-off-by: Xe Iaso <xe@tigrisdata.com>
+
+- fix(simplestorage): if enriched bucket info can't be fetched, downgrade to simple bucket info
+
+Signed-off-by: Xe Iaso <xe@tigrisdata.com>
+
+- fix(simplestorage): use lower for truncation detection
+
+Signed-off-by: Xe Iaso <xe@tigrisdata.com>
+
+- refactor(simplestorage): remove dead list result types
+
+BucketList, SnapshotList, and ListResult are no longer referenced
+after List operations were converted to iterators. Drop the unused
+types.
+
+Assisted-by: Claude Opus 4.7 via Claude Code
+Signed-off-by: Xe Iaso <xe@tigrisdata.com>
+
+- fix(simplestorage): preserve Created when GrabForkInfo enriches bucket info
+
+Info() returns a BucketInfo populated from HeadBucketForkOrSnapshot,
+which has no creation timestamp. When Buckets() opted into
+GrabForkInfo and Info() succeeded, the yielded BucketInfo dropped
+the CreationDate that ListBuckets already provided, so callers
+paradoxically lost Created by asking for more information.
+
+Copy CreationDate from the ListBuckets response onto the enriched
+BucketInfo before yielding, matching the GrabForkInfo=false and
+Info() error fallback paths.
+
+Assisted-by: Claude Opus 4.7 via Claude Code
+Signed-off-by: Xe Iaso <xe@tigrisdata.com>
+
+- fix(simplestorage): honor WithListLimit in Buckets iterator
+
+The Buckets iterator hardcoded MaxBuckets to 50 via a local constant,
+silently ignoring o.MaxKeys set by WithListLimit. Use o.MaxKeys when
+provided, falling back to 50 as the default page size.
+
+Assisted-by: Claude Opus 4.7 via Claude Code
+Signed-off-by: Xe Iaso <xe@tigrisdata.com>
+
+- storage.Client.CreateBucketSnapshot now returns
+  *CreateBucketSnapshotOutput instead of *s3.CreateBucketOutput. The
+  new type embeds *s3.CreateBucketOutput so existing field access
+  still works; callers that bound the return value to
+  *s3.CreateBucketOutput must re-type their variables.
+- simplestorage.Client.List now returns \*ListResult
+  instead of []Object to carry CommonPrefixes, PaginationToken, and
+  HasMore.
+
+Assisted-by: Claude Opus 4.7 via Claude Code
+Signed-off-by: Xe Iaso <xe@tigrisdata.com>
+
+- fix(simplestorage): default bucket Access to private
+
+BucketOptions.defaults() left Access as the empty zero value, which
+made bucketACL emit no canned ACL header. The WithBucketAccess
+docstring already documented private as the default, so align the
+implementation with the contract: seed Access in defaults() and have
+bucketACL fall through to BucketCannedACLPrivate so unset values still
+land on the wire as private.
+
+Add a regression test that asserts the default.
+
+Signed-off-by: Xe Iaso <xe@tigrisdata.com>
+Assisted-by: Claude Opus 4.7 via Claude Code
+Signed-off-by: Xe Iaso <xe@tigrisdata.com>
+
+- fix(simplestorage): handle rand.Read error in generateRandomSuffix
+
+Two issues:
+
+- rand.Read could return an error that the previous code silently
+  dropped, leaving the suffix all-zeros if entropy failed.
+- length/2 truncated for odd lengths, producing a hex string shorter
+  than the requested length before slicing.
+
+Return (string, error), use (length+1)/2 bytes so the hex output is
+always at least length characters before truncation, and propagate
+the error from Put with bucket/key context.
+
+Signed-off-by: Xe Iaso <xe@tigrisdata.com>
+Assisted-by: Claude Opus 4.7 via Claude Code
+Signed-off-by: Xe Iaso <xe@tigrisdata.com>
+
 # [0.6.0](https://github.com/tigrisdata/storage-go/compare/v0.5.0...v0.6.0) (2026-04-06)
 
 ### Features
