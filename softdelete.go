@@ -247,14 +247,7 @@ func (c *Client) ListSoftDeletedObjects(ctx context.Context, in *ListSoftDeleted
 		Objects:             make([]SoftDeletedObject, 0, len(parsed.DeleteMarkers)),
 	}
 	for _, dm := range parsed.DeleteMarkers {
-		out.Objects = append(out.Objects, SoftDeletedObject{
-			Key:          dm.Key,
-			VersionID:    dm.VersionID,
-			Size:         dm.Size,
-			ETag:         dm.ETag,
-			SoftDeleted:  dm.SoftDeleted,
-			LastModified: dm.LastModified,
-		})
+		out.Objects = append(out.Objects, SoftDeletedObject(dm))
 	}
 
 	return out, nil
