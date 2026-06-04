@@ -272,6 +272,26 @@ func ExampleClient_ForceDeleteBucket() {
 	}
 }
 
+func ExampleClient_ListSoftDeletedBuckets() {
+	ctx := context.Background()
+
+	client, err := storage.New(ctx)
+	if err != nil {
+		log.Fatal(err) // handle the error here
+	}
+
+	// List the soft-deleted buckets in the account.
+	listed, err := client.ListSoftDeletedBuckets(ctx, nil)
+	if err != nil {
+		log.Fatal(err) // handle the error here
+	}
+
+	for _, bucket := range listed.Buckets {
+		_ = bucket.Name          // bucket to restore with RestoreBucket
+		_ = bucket.RetentionDays // days before the bucket is permanently removed
+	}
+}
+
 func ExampleClient_RestoreBucket() {
 	ctx := context.Background()
 

@@ -339,6 +339,113 @@ func (c *Client) RestoreBucket(ctx context.Context, in *RestoreBucketInput) (*Re
 	return &RestoreBucketOutput{}, nil
 }
 
+// SoftDeletedBucket describes a single soft-deleted bucket returned by
+// ListSoftDeletedBuckets.
+type SoftDeletedBucket struct {
+	// Name is the bucket name. It stays reserved while the bucket is
+	// soft-deleted.
+	Name string
+	// InitialCreatedDate is the time the bucket was first created.
+	InitialCreatedDate time.Time
+	// CreationDate is the time the bucket was most recently created.
+	CreationDate time.Time
+	// RetentionDays is the soft delete retention window in days. The bucket is
+	// permanently removed once the window expires.
+	RetentionDays int
+}
+
+// ListSoftDeletedBucketsInput is the input for a ListSoftDeletedBuckets request.
+type ListSoftDeletedBucketsInput struct {
+	// ContinuationToken continues a truncated listing from NextContinuationToken. Optional.
+	ContinuationToken string
+	// MaxBuckets limits the number of buckets returned. Optional; 0 uses the server default.
+	MaxBuckets int32
+}
+
+// ListSoftDeletedBucketsOutput is the response from a ListSoftDeletedBuckets request.
+type ListSoftDeletedBucketsOutput struct {
+	// Buckets is the list of soft-deleted buckets.
+	Buckets []SoftDeletedBucket
+	// IsTruncated reports whether more results are available beyond this page.
+	IsTruncated bool
+	// NextContinuationToken is the token to pass as ContinuationToken for the next page.
+	NextContinuationToken string
+}
+
+// listAllMyBucketsResult mirrors the S3 ListAllMyBucketsResult XML response,
+// augmented with the Tigris-specific SoftDeleteInfo fields that the AWS SDK
+// does not model.
+type listAllMyBucketsResult struct {
+	XMLName               xml.Name             `xml:"ListAllMyBucketsResult"`
+	IsTruncated           bool                 `xml:"IsTruncated"`
+	NextContinuationToken string               `xml:"NextContinuationToken"`
+	Buckets               []bucketListingEntry `xml:"Buckets>Bucket"`
+}
+
+type bucketListingEntry struct {
+	Name               string    `xml:"Name"`
+	InitialCreatedDate time.Time `xml:"InitialCreatedDate"`
+	CreationDate       time.Time `xml:"CreationDate"`
+	RetentionDays      int       `xml:"SoftDeleteInfo>RetentionDays"`
+}
+
+// ListSoftDeletedBuckets lists the soft-deleted buckets in the account.
+//
+// This issues a bucket listing with the OnlyDeleted query parameter so the
+// server returns only soft-deleted buckets, each enriched with its retention
+// window — a field the standard S3 SDK does not surface. Use the returned Name
+// with RestoreBucket to recover a bucket before its window expires. A nil
+// input lists the first page with the server default page size.
+//
+// See Tigris documentation[1] for more information.
+//
+// [1]: https://www.tigrisdata.com/docs/buckets/soft-delete/
+func (c *Client) ListSoftDeletedBuckets(ctx context.Context, in *ListSoftDeletedBucketsInput) (*ListSoftDeletedBucketsOutput, error) {
+	q := url.Values{}
+	q.Set("OnlyDeleted", "true")
+	if in != nil {
+		if in.ContinuationToken != "" {
+			q.Set("ContinuationToken", in.ContinuationToken)
+		}
+		if in.MaxBuckets > 0 {
+			q.Set("MaxBuckets", strconv.FormatInt(int64(in.MaxBuckets), 10))
+		}
+	}
+
+	reqURL := c.baseEndpoint() + "/" + queryString(q.Encode())
+
+	resp, err := c.doSignedRequest(ctx, http.MethodGet, reqURL, nil, nil)
+	if err != nil {
+		return nil, fmt.Errorf("storage: ListSoftDeletedBuckets: request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode >= 400 {
+		return nil, httpError(resp, "ListSoftDeletedBuckets")
+	}
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("storage: ListSoftDeletedBuckets: failed to read response: %w", err)
+	}
+
+	var parsed listAllMyBucketsResult
+	if err := xml.Unmarshal(body, &parsed); err != nil {
+		return nil, fmt.Errorf("storage: ListSoftDeletedBuckets: failed to parse response: %w", err)
+	}
+
+	out := &ListSoftDeletedBucketsOutput{
+		IsTruncated:           parsed.IsTruncated,
+		NextContinuationToken: parsed.NextContinuationToken,
+		Buckets:               make([]SoftDeletedBucket, 0, len(parsed.Buckets)),
+	}
+	for _, b := range parsed.Buckets {
+		out.Buckets = append(out.Buckets, SoftDeletedBucket(b))
+	}
+
+	return out, nil
+}
+
 type softDeleteConfig struct {
 	Enabled       bool `json:"enabled"`
 	RetentionDays int  `json:"retention_days,omitempty"`

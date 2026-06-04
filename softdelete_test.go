@@ -121,6 +121,159 @@ func TestListSoftDeletedObjects_Validation(t *testing.T) {
 	}
 }
 
+const sampleListBucketsXML = `<?xml version="1.0" encoding="UTF-8"?>
+<ListAllMyBucketsResult>
+  <Owner><ID>tid_test</ID><DisplayName>tid_test</DisplayName></Owner>
+  <IsTruncated>true</IsTruncated>
+  <NextContinuationToken>next-token</NextContinuationToken>
+  <Buckets>
+    <Bucket>
+      <Name>deleted-bucket-one</Name>
+      <InitialCreatedDate>2026-06-01T10:00:00Z</InitialCreatedDate>
+      <SoftDeleteInfo>
+        <Enabled>true</Enabled>
+        <RetentionDays>7</RetentionDays>
+      </SoftDeleteInfo>
+      <CreationDate>2026-06-01T10:00:00Z</CreationDate>
+    </Bucket>
+    <Bucket>
+      <Name>deleted-bucket-two</Name>
+      <InitialCreatedDate>2026-05-15T08:30:00Z</InitialCreatedDate>
+      <SoftDeleteInfo>
+        <Enabled>true</Enabled>
+        <RetentionDays>30</RetentionDays>
+      </SoftDeleteInfo>
+      <CreationDate>2026-05-20T09:00:00Z</CreationDate>
+    </Bucket>
+  </Buckets>
+</ListAllMyBucketsResult>`
+
+func TestListSoftDeletedBuckets_RequestAndParse(t *testing.T) {
+	var req *http.Request
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		req = r
+		_, _ = w.Write([]byte(sampleListBucketsXML))
+	}))
+	defer server.Close()
+
+	cli, err := New(context.Background(),
+		WithEndpoint(server.URL),
+		WithAccessKeypair("test-key", "test-secret"),
+		WithPathStyle(true),
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	out, err := cli.ListSoftDeletedBuckets(context.Background(), &ListSoftDeletedBucketsInput{
+		ContinuationToken: "start-token",
+		MaxBuckets:        50,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if req.Method != http.MethodGet {
+		t.Errorf("method = %q, want GET", req.Method)
+	}
+	if req.URL.Path != "/" {
+		t.Errorf("path = %q, want /", req.URL.Path)
+	}
+	if got := req.URL.Query().Get("OnlyDeleted"); got != "true" {
+		t.Errorf("OnlyDeleted = %q, want true", got)
+	}
+	if got := req.URL.Query().Get("ContinuationToken"); got != "start-token" {
+		t.Errorf("ContinuationToken = %q, want start-token", got)
+	}
+	if got := req.URL.Query().Get("MaxBuckets"); got != "50" {
+		t.Errorf("MaxBuckets = %q, want 50", got)
+	}
+	if req.Header.Get("Authorization") == "" {
+		t.Error("missing Authorization header (SigV4)")
+	}
+
+	if len(out.Buckets) != 2 {
+		t.Fatalf("got %d buckets, want 2", len(out.Buckets))
+	}
+	if !out.IsTruncated || out.NextContinuationToken != "next-token" {
+		t.Errorf("pagination fields = %+v", out)
+	}
+	first := out.Buckets[0]
+	if first.Name != "deleted-bucket-one" {
+		t.Errorf("first bucket name = %q, want deleted-bucket-one", first.Name)
+	}
+	if first.RetentionDays != 7 {
+		t.Errorf("first bucket retention days = %d, want 7", first.RetentionDays)
+	}
+	wantCreated := time.Date(2026, 6, 1, 10, 0, 0, 0, time.UTC)
+	if !first.CreationDate.Equal(wantCreated) {
+		t.Errorf("first bucket CreationDate = %v, want %v", first.CreationDate, wantCreated)
+	}
+	second := out.Buckets[1]
+	if second.Name != "deleted-bucket-two" || second.RetentionDays != 30 {
+		t.Errorf("second bucket name/retention = %q/%d, want deleted-bucket-two/30", second.Name, second.RetentionDays)
+	}
+	wantInitial := time.Date(2026, 5, 15, 8, 30, 0, 0, time.UTC)
+	if !second.InitialCreatedDate.Equal(wantInitial) {
+		t.Errorf("second bucket InitialCreatedDate = %v, want %v", second.InitialCreatedDate, wantInitial)
+	}
+}
+
+func TestListSoftDeletedBuckets_NilInput(t *testing.T) {
+	var req *http.Request
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		req = r
+		_, _ = w.Write([]byte(`<?xml version="1.0" encoding="UTF-8"?><ListAllMyBucketsResult><Buckets/></ListAllMyBucketsResult>`))
+	}))
+	defer server.Close()
+
+	cli, err := New(context.Background(),
+		WithEndpoint(server.URL),
+		WithAccessKeypair("test-key", "test-secret"),
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	out, err := cli.ListSoftDeletedBuckets(context.Background(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if got := req.URL.Query().Get("OnlyDeleted"); got != "true" {
+		t.Errorf("OnlyDeleted = %q, want true", got)
+	}
+	if req.URL.Query().Has("ContinuationToken") {
+		t.Error("ContinuationToken should be omitted when unset")
+	}
+	if req.URL.Query().Has("MaxBuckets") {
+		t.Error("MaxBuckets should be omitted when unset")
+	}
+	if len(out.Buckets) != 0 || out.IsTruncated {
+		t.Errorf("output = %+v, want empty untruncated listing", out)
+	}
+}
+
+func TestListSoftDeletedBuckets_HTTPError(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusForbidden)
+		_, _ = w.Write([]byte(`<Error><Code>AccessDenied</Code></Error>`))
+	}))
+	defer server.Close()
+
+	cli, err := New(context.Background(),
+		WithEndpoint(server.URL),
+		WithAccessKeypair("test-key", "test-secret"),
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := cli.ListSoftDeletedBuckets(context.Background(), nil); err == nil {
+		t.Fatal("expected error for HTTP 403")
+	}
+}
+
 func TestRestoreSoftDeletedObject_RequestConstruction(t *testing.T) {
 	tests := []struct {
 		name        string
@@ -540,5 +693,46 @@ func TestSoftDeleteLifecycle_integration(t *testing.T) {
 		Key:    key,
 	}); err != nil {
 		t.Fatalf("RestoreSoftDeletedObject: %v", err)
+	}
+
+	if _, err := cli.ForceDeleteBucket(ctx, &s3.DeleteBucketInput{Bucket: aws.String(bucket)}); err != nil {
+		t.Fatalf("ForceDeleteBucket: %v", err)
+	}
+
+	// Soft-delete state is eventually consistent, so poll the deleted-buckets
+	// listing (paginating, as other soft-deleted buckets may be present) until
+	// the bucket shows up or the deadline passes.
+	deadline := time.Now().Add(15 * time.Second)
+	for {
+		if findSoftDeletedBucket(t, ctx, cli, bucket) {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("soft-deleted bucket %q not found in ListSoftDeletedBuckets", bucket)
+		}
+		time.Sleep(time.Second)
+	}
+}
+
+// findSoftDeletedBucket reports whether the named bucket appears in the
+// soft-deleted buckets listing, following pagination.
+func findSoftDeletedBucket(t *testing.T, ctx context.Context, cli *Client, bucket string) bool {
+	t.Helper()
+
+	var token string
+	for {
+		listed, err := cli.ListSoftDeletedBuckets(ctx, &ListSoftDeletedBucketsInput{ContinuationToken: token})
+		if err != nil {
+			t.Fatalf("ListSoftDeletedBuckets: %v", err)
+		}
+		for _, b := range listed.Buckets {
+			if b.Name == bucket {
+				return true
+			}
+		}
+		if !listed.IsTruncated {
+			return false
+		}
+		token = listed.NextContinuationToken
 	}
 }
