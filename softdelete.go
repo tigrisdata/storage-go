@@ -52,7 +52,10 @@ func (c *Client) CreateBucketWithSoftDelete(ctx context.Context, in *CreateBucke
 		return nil, fmt.Errorf("storage: CreateBucketWithSoftDelete: %w", ErrMissingBucket)
 	}
 
-	if in.RetentionDays > 0 {
+	// Only 0 means "use the default window". Any other value, negative included,
+	// goes to the server so an out-of-range window is reported as an error
+	// instead of silently becoming the 7-day default.
+	if in.RetentionDays != 0 {
 		optFns = append(optFns, tigrisheaders.WithSoftDelete(in.RetentionDays))
 	} else {
 		optFns = append(optFns, tigrisheaders.WithSoftDelete())
@@ -76,6 +79,10 @@ func (c *Client) CreateBucketWithSoftDelete(ctx context.Context, in *CreateBucke
 //
 // [1]: https://www.tigrisdata.com/docs/buckets/soft-delete/
 func (c *Client) ForceDeleteBucket(ctx context.Context, in *s3.DeleteBucketInput, opts ...func(*s3.Options)) (*s3.DeleteBucketOutput, error) {
+	if in == nil || in.Bucket == nil || *in.Bucket == "" {
+		return nil, fmt.Errorf("storage: ForceDeleteBucket: %w", ErrMissingBucket)
+	}
+
 	opts = append(opts, tigrisheaders.WithForceDelete())
 
 	return c.Client.DeleteBucket(ctx, in, opts...)
@@ -88,7 +95,9 @@ func (c *Client) ForceDeleteBucket(ctx context.Context, in *s3.DeleteBucketInput
 // versionID identifies the soft-deleted version to purge, as returned by
 // ListSoftDeletedObjects, and is required: an empty versionID would target the
 // latest version and create a new soft-delete marker rather than purging a
-// version, the opposite of this method's intent.
+// version, the opposite of this method's intent. The value is the deletion
+// timestamp in nanoseconds since the Unix epoch. Tigris rejects a value that is
+// zero or negative, so pass the VersionID from ListSoftDeletedObjects unchanged.
 //
 // This is a dangerous operation. Do not use this unless you are aware of
 // the consequences of your actions. Support will not be able to help you
@@ -108,6 +117,10 @@ func (c *Client) PermanentlyDeleteObject(ctx context.Context, bucket, key, versi
 		return nil, fmt.Errorf("storage: PermanentlyDeleteObject: %w", ErrMissingVersionID)
 	}
 
+	// X-Tigris-Soft-Delete carries two unrelated meanings depending on the
+	// route. On CreateBucket (tigrisheaders.WithSoftDelete) it enables retention.
+	// On DeleteObject, as here, it means "act on the soft-delete state", which
+	// purges the named version instead of creating a new tombstone.
 	opts = append(opts, tigrisheaders.WithHeader("X-Tigris-Soft-Delete", "true"))
 
 	return c.Client.DeleteObject(ctx, &s3.DeleteObjectInput{
@@ -162,17 +175,21 @@ type ListSoftDeletedObjectsOutput struct {
 }
 
 // listVersionsResult mirrors the S3 ListVersionsResult XML response, augmented
-// with the Tigris-specific SoftDeleted/Size/ETag fields on delete markers that
-// the AWS SDK does not model.
+// with the Tigris-specific SoftDeleted flag that the AWS SDK does not model.
+//
+// Tigris returns soft-delete tombstones as Version elements, not DeleteMarker
+// elements, because the S3 DeleteMarker schema has nowhere to carry Size or
+// ETag. Regular S3 delete markers are still returned as DeleteMarker elements
+// and are deliberately not decoded here: they are not soft-deleted.
 type listVersionsResult struct {
-	XMLName             xml.Name            `xml:"ListVersionsResult"`
-	IsTruncated         bool                `xml:"IsTruncated"`
-	NextKeyMarker       string              `xml:"NextKeyMarker"`
-	NextVersionIDMarker string              `xml:"NextVersionIdMarker"`
-	DeleteMarkers       []deleteMarkerEntry `xml:"DeleteMarker"`
+	XMLName             xml.Name       `xml:"ListVersionsResult"`
+	IsTruncated         bool           `xml:"IsTruncated"`
+	NextKeyMarker       string         `xml:"NextKeyMarker"`
+	NextVersionIDMarker string         `xml:"NextVersionIdMarker"`
+	Versions            []versionEntry `xml:"Version"`
 }
 
-type deleteMarkerEntry struct {
+type versionEntry struct {
 	Key          string    `xml:"Key"`
 	VersionID    string    `xml:"VersionId"`
 	Size         int64     `xml:"Size"`
@@ -188,6 +205,10 @@ type deleteMarkerEntry struct {
 // and a SoftDeleted flag — fields the standard S3 SDK does not surface on delete
 // markers. Use the returned VersionID with RestoreSoftDeletedObject to recover a
 // version or PermanentlyDeleteObject to purge it.
+//
+// This method uses a Tigris endpoint that the S3 SDK cannot express, so it
+// sends a signed request directly and does not accept s3.Options functions.
+// Options such as tigrisheaders.WithHeader have no effect here.
 //
 // See Tigris documentation[1] for more information.
 //
@@ -244,10 +265,15 @@ func (c *Client) ListSoftDeletedObjects(ctx context.Context, in *ListSoftDeleted
 		IsTruncated:         parsed.IsTruncated,
 		NextKeyMarker:       parsed.NextKeyMarker,
 		NextVersionIDMarker: parsed.NextVersionIDMarker,
-		Objects:             make([]SoftDeletedObject, 0, len(parsed.DeleteMarkers)),
+		Objects:             make([]SoftDeletedObject, 0, len(parsed.Versions)),
 	}
-	for _, dm := range parsed.DeleteMarkers {
-		out.Objects = append(out.Objects, SoftDeletedObject(dm))
+	for _, v := range parsed.Versions {
+		// A versioned bucket returns its live versions in the same listing.
+		// Only the tombstones carry SoftDeleted.
+		if !v.SoftDeleted {
+			continue
+		}
+		out.Objects = append(out.Objects, SoftDeletedObject(v))
 	}
 
 	return out, nil
@@ -260,7 +286,8 @@ type RestoreSoftDeletedObjectInput struct {
 	// Key is the object key to restore. Required.
 	Key string
 	// VersionID restores a specific soft-deleted version, as returned by
-	// ListSoftDeletedObjects. Optional; empty restores the most recent
+	// ListSoftDeletedObjects. The value is the deletion timestamp in nanoseconds
+	// since the Unix epoch. Optional; empty restores the most recent
 	// soft-deleted version.
 	VersionID string
 }
@@ -270,6 +297,10 @@ type RestoreSoftDeletedObjectOutput struct{}
 
 // RestoreSoftDeletedObject restores a soft-deleted object, undoing a delete
 // before its retention window expires.
+//
+// This method uses a Tigris endpoint that the S3 SDK cannot express, so it
+// sends a signed request directly and does not accept s3.Options functions.
+// Options such as tigrisheaders.WithHeader have no effect here.
 //
 // See Tigris documentation[1] for more information.
 //
@@ -315,6 +346,10 @@ type RestoreBucketOutput struct{}
 
 // RestoreBucket restores a soft-deleted bucket, recovering it and its contents
 // before the retention window expires.
+//
+// This method uses a Tigris endpoint that the S3 SDK cannot express, so it
+// sends a signed request directly and does not accept s3.Options functions.
+// Options such as tigrisheaders.WithHeader have no effect here.
 //
 // See Tigris documentation[1] for more information.
 //
@@ -375,11 +410,14 @@ type ListSoftDeletedBucketsOutput struct {
 // listAllMyBucketsResult mirrors the S3 ListAllMyBucketsResult XML response,
 // augmented with the Tigris-specific SoftDeleteInfo fields that the AWS SDK
 // does not model.
+//
+// ContinuationToken is the only pagination field Tigris returns here. There is
+// no IsTruncated element, so more pages are available exactly when the token is
+// not empty.
 type listAllMyBucketsResult struct {
-	XMLName               xml.Name             `xml:"ListAllMyBucketsResult"`
-	IsTruncated           bool                 `xml:"IsTruncated"`
-	NextContinuationToken string               `xml:"NextContinuationToken"`
-	Buckets               []bucketListingEntry `xml:"Buckets>Bucket"`
+	XMLName           xml.Name             `xml:"ListAllMyBucketsResult"`
+	ContinuationToken string               `xml:"ContinuationToken"`
+	Buckets           []bucketListingEntry `xml:"Buckets>Bucket"`
 }
 
 type bucketListingEntry struct {
@@ -397,18 +435,25 @@ type bucketListingEntry struct {
 // with RestoreBucket to recover a bucket before its window expires. A nil
 // input lists the first page with the server default page size.
 //
+// This method uses a Tigris endpoint that the S3 SDK cannot express, so it
+// sends a signed request directly and does not accept s3.Options functions.
+// Options such as tigrisheaders.WithHeader have no effect here.
+//
 // See Tigris documentation[1] for more information.
 //
 // [1]: https://www.tigrisdata.com/docs/buckets/soft-delete/
 func (c *Client) ListSoftDeletedBuckets(ctx context.Context, in *ListSoftDeletedBucketsInput) (*ListSoftDeletedBucketsOutput, error) {
+	// OnlyDeleted is a Tigris filter and is read PascalCase. The pagination
+	// parameters are the standard S3 ones and are read kebab-case. The names
+	// are case-sensitive server-side, so this asymmetry is deliberate.
 	q := url.Values{}
 	q.Set("OnlyDeleted", "true")
 	if in != nil {
 		if in.ContinuationToken != "" {
-			q.Set("ContinuationToken", in.ContinuationToken)
+			q.Set("continuation-token", in.ContinuationToken)
 		}
 		if in.MaxBuckets > 0 {
-			q.Set("MaxBuckets", strconv.FormatInt(int64(in.MaxBuckets), 10))
+			q.Set("max-buckets", strconv.FormatInt(int64(in.MaxBuckets), 10))
 		}
 	}
 
@@ -435,8 +480,8 @@ func (c *Client) ListSoftDeletedBuckets(ctx context.Context, in *ListSoftDeleted
 	}
 
 	out := &ListSoftDeletedBucketsOutput{
-		IsTruncated:           parsed.IsTruncated,
-		NextContinuationToken: parsed.NextContinuationToken,
+		IsTruncated:           parsed.ContinuationToken != "",
+		NextContinuationToken: parsed.ContinuationToken,
 		Buckets:               make([]SoftDeletedBucket, 0, len(parsed.Buckets)),
 	}
 	for _, b := range parsed.Buckets {
@@ -472,6 +517,10 @@ type SetBucketSoftDeleteOutput struct{}
 
 // SetBucketSoftDelete enables or disables soft delete on an existing bucket.
 //
+// This method uses a Tigris endpoint that the S3 SDK cannot express, so it
+// sends a signed request directly and does not accept s3.Options functions.
+// Options such as tigrisheaders.WithHeader have no effect here.
+//
 // See Tigris documentation[1] for more information.
 //
 // [1]: https://www.tigrisdata.com/docs/buckets/soft-delete/
@@ -480,8 +529,9 @@ func (c *Client) SetBucketSoftDelete(ctx context.Context, in *SetBucketSoftDelet
 		return nil, fmt.Errorf("storage: SetBucketSoftDelete: %w", ErrMissingBucket)
 	}
 
+	// As in CreateBucketWithSoftDelete, only 0 means "use the default window".
 	cfg := softDeleteConfig{Enabled: in.Enabled}
-	if in.Enabled && in.RetentionDays > 0 {
+	if in.Enabled && in.RetentionDays != 0 {
 		cfg.RetentionDays = in.RetentionDays
 	}
 
@@ -516,9 +566,13 @@ func (c *Client) bucketURL(bucket, rawQuery string) string {
 //
 // The key is assigned to url.URL.Path in its decoded form; url.URL.String
 // percent-encodes it on serialization (including %, ?, and #) while preserving
-// "/" as path separators, so the URL sent matches the SigV4 canonical URI and
-// arbitrary keys round-trip correctly. url.PathEscape is deliberately not used:
-// it would encode "/" separators and corrupt multi-segment keys.
+// "/" as path separators, so arbitrary keys round-trip correctly.
+// url.PathEscape is deliberately not used: it would encode "/" separators and
+// corrupt multi-segment keys.
+//
+// The path is therefore already encoded once by the time it is signed, which is
+// why doSignedRequest sets DisableURIPathEscaping. Without that option the
+// signer encodes it again and the canonical URI stops matching the request.
 func (c *Client) objectURL(bucket, key, rawQuery string) string {
 	u, err := url.Parse(c.baseEndpoint())
 	if err != nil {

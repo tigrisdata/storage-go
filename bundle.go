@@ -83,8 +83,8 @@ type bundleRequestBody struct {
 //
 // The caller is responsible for closing the returned Body.
 func (c *Client) BundleObjects(ctx context.Context, in *BundleObjectsInput) (*BundleObjectsOutput, error) {
-	if in.Bucket == "" {
-		return nil, fmt.Errorf("storage: BundleObjects: bucket is required")
+	if in == nil || in.Bucket == "" {
+		return nil, fmt.Errorf("storage: BundleObjects: %w", ErrMissingBucket)
 	}
 	if len(in.Keys) == 0 {
 		return nil, fmt.Errorf("storage: BundleObjects: at least one key is required")

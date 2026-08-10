@@ -112,7 +112,7 @@ func ExampleWithSoftDelete() {
 		Bucket: aws.String("my-bucket"),
 	}, tigrisheaders.WithSoftDelete())
 	if err != nil {
-		log.Fatal(err)
+		log.Fatal(err) // handle the error here
 	}
 
 	// Create a bucket with a custom 30-day retention window
@@ -120,7 +120,7 @@ func ExampleWithSoftDelete() {
 		Bucket: aws.String("my-other-bucket"),
 	}, tigrisheaders.WithSoftDelete(30))
 	if err != nil {
-		log.Fatal(err)
+		log.Fatal(err) // handle the error here
 	}
 }
 
@@ -131,7 +131,7 @@ func ExampleWithForceDelete() {
 		Bucket: aws.String("my-bucket"),
 	}, tigrisheaders.WithForceDelete())
 	if err != nil {
-		log.Fatal(err)
+		log.Fatal(err) // handle the error here
 	}
 }
 

@@ -288,7 +288,7 @@ func ExampleClient_ListSoftDeletedBuckets() {
 
 	for _, bucket := range listed.Buckets {
 		_ = bucket.Name          // bucket to restore with RestoreBucket
-		_ = bucket.RetentionDays // days before the bucket is permanently removed
+		_ = bucket.RetentionDays // the configured window, not the time left
 	}
 }
 

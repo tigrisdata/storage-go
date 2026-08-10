@@ -177,11 +177,13 @@ To read the next page, pass `listed.NextKeyMarker` and `listed.NextVersionIDMark
 #### List and Restore Soft-Deleted Buckets
 
 A soft-deleted bucket keeps its name reserved until the retention window expires.
+`RetentionDays` is the window the bucket was configured with. It is not a
+countdown: a bucket deleted 6 days ago with a 30-day window still reports 30.
 
 ```go
 listed, err := client.ListSoftDeletedBuckets(ctx, nil)
 // listed.Buckets[i].Name          - bucket to restore
-// listed.Buckets[i].RetentionDays - days before permanent removal
+// listed.Buckets[i].RetentionDays - the configured window in days
 
 _, err = client.RestoreBucket(ctx, &storage.RestoreBucketInput{
     Bucket: "my-bucket",

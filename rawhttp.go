@@ -47,7 +47,7 @@ func (c *Client) baseEndpoint() string {
 func (c *Client) doSignedRequest(ctx context.Context, method, url string, headers map[string]string, body []byte) (*http.Response, error) {
 	req, err := http.NewRequestWithContext(ctx, method, url, bytes.NewReader(body))
 	if err != nil {
-		return nil, fmt.Errorf("storage: failed to create request: %w", err)
+		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
 
 	for k, v := range headers {
@@ -58,7 +58,7 @@ func (c *Client) doSignedRequest(ctx context.Context, method, url string, header
 	if opts.Credentials != nil {
 		creds, err := opts.Credentials.Retrieve(ctx)
 		if err != nil {
-			return nil, fmt.Errorf("storage: failed to retrieve credentials: %w", err)
+			return nil, fmt.Errorf("failed to retrieve credentials: %w", err)
 		}
 
 		payloadHash := sha256Hex(body)
@@ -69,9 +69,26 @@ func (c *Client) doSignedRequest(ctx context.Context, method, url string, header
 			region = "auto"
 		}
 
-		if err := v4.NewSigner().SignHTTP(ctx, creds, req, payloadHash, "s3", region, time.Now()); err != nil {
-			return nil, fmt.Errorf("storage: failed to sign request: %w", err)
+		// DisableURIPathEscaping must be set for the same reason the S3 client
+		// sets it in newDefaultV4Signer: the request path is already
+		// percent-encoded, and the signer would otherwise escape it a second
+		// time. That double-encoded canonical URI would not match the
+		// single-encoded one Tigris computes, so any key holding a space, "%",
+		// "+", "#", "?", or a non-ASCII byte would fail with
+		// SignatureDoesNotMatch.
+		signer := v4.NewSigner(func(o *v4.SignerOptions) {
+			o.DisableURIPathEscaping = true
+		})
+
+		if err := signer.SignHTTP(ctx, creds, req, payloadHash, "s3", region, time.Now()); err != nil {
+			return nil, fmt.Errorf("failed to sign request: %w", err)
 		}
+	}
+
+	// Honor a custom HTTP client (custom transport, TLS config, proxy, tracing)
+	// configured on the underlying S3 client. Fall back to the shared client.
+	if opts.HTTPClient != nil {
+		return opts.HTTPClient.Do(req)
 	}
 
 	return tigrisHTTPClient.Do(req)
