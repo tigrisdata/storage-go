@@ -1,3 +1,9 @@
+# [0.8.0](https://github.com/tigrisdata/storage-go/compare/v0.7.0...v0.8.0) (2026-08-11)
+
+### Features
+
+- add soft-delete lifecycle support ([#28](https://github.com/tigrisdata/storage-go/issues/28)) ([830a738](https://github.com/tigrisdata/storage-go/commit/830a73850eba19d18f060d617d38dfb38a28b322))
+
 # [0.7.0](https://github.com/tigrisdata/storage-go/compare/v0.6.0...v0.7.0) (2026-06-02)
 
 - feat(simplestorage)!: achieve feature parity with TypeScript SDK ([#26](https://github.com/tigrisdata/storage-go/issues/26)) ([bb8c144](https://github.com/tigrisdata/storage-go/commit/bb8c144904087277f8b75be4d8d9bcada15ba6a9))
