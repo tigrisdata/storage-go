@@ -95,9 +95,11 @@ func (c *Client) ForceDeleteBucket(ctx context.Context, in *s3.DeleteBucketInput
 // versionID identifies the soft-deleted version to purge, as returned by
 // ListSoftDeletedObjects, and is required: an empty versionID would target the
 // latest version and create a new soft-delete marker rather than purging a
-// version, the opposite of this method's intent. The value is the deletion
-// timestamp in nanoseconds since the Unix epoch. Tigris rejects a value that is
-// zero or negative, so pass the VersionID from ListSoftDeletedObjects unchanged.
+// version, the opposite of this method's intent. For a versioned bucket the
+// value is the version ID of the object. For a regular bucket it is the
+// last-modified time of the object as of the moment it was deleted. Both are
+// nanoseconds since the Unix epoch, but treat the value as opaque and pass the
+// VersionID from ListSoftDeletedObjects unchanged.
 //
 // This is a dangerous operation. Do not use this unless you are aware of
 // the consequences of your actions. Support will not be able to help you
@@ -286,8 +288,11 @@ type RestoreSoftDeletedObjectInput struct {
 	// Key is the object key to restore. Required.
 	Key string
 	// VersionID restores a specific soft-deleted version, as returned by
-	// ListSoftDeletedObjects. The value is the deletion timestamp in nanoseconds
-	// since the Unix epoch. Optional; empty restores the most recent
+	// ListSoftDeletedObjects. For a versioned bucket the value is the version ID
+	// of the object. For a regular bucket it is the last-modified time of the
+	// object as of the moment it was deleted. Both are nanoseconds since the Unix
+	// epoch, but treat the value as opaque and pass it through from
+	// ListSoftDeletedObjects unchanged. Optional; empty restores the most recent
 	// soft-deleted version.
 	VersionID string
 }
@@ -382,7 +387,8 @@ type SoftDeletedBucket struct {
 	Name string
 	// InitialCreatedDate is the time the bucket was first created.
 	InitialCreatedDate time.Time
-	// CreationDate is the time the bucket was most recently created.
+	// CreationDate is the time the bucket was most recently modified. It is the
+	// same as InitialCreatedDate when the bucket was never modified.
 	CreationDate time.Time
 	// RetentionDays is the soft delete retention window in days. The bucket is
 	// permanently removed once the window expires.
@@ -590,10 +596,4 @@ func queryString(rawQuery string) string {
 		return ""
 	}
 	return "?" + rawQuery
-}
-
-// httpError reads a bounded amount of an error response body and wraps it.
-func httpError(resp *http.Response, op string) error {
-	errBody, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
-	return fmt.Errorf("storage: %s: HTTP %d: %s", op, resp.StatusCode, string(errBody))
 }
