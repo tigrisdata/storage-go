@@ -106,6 +106,35 @@ func ExampleWithSnapshotVersion() {
 	}
 }
 
+func ExampleWithSoftDelete() {
+	// Create a bucket with the default 7-day soft delete retention window
+	_, err := client.CreateBucket(ctx, &s3.CreateBucketInput{
+		Bucket: aws.String("my-bucket"),
+	}, tigrisheaders.WithSoftDelete())
+	if err != nil {
+		log.Fatal(err) // handle the error here
+	}
+
+	// Create a bucket with a custom 30-day retention window
+	_, err = client.CreateBucket(ctx, &s3.CreateBucketInput{
+		Bucket: aws.String("my-other-bucket"),
+	}, tigrisheaders.WithSoftDelete(30))
+	if err != nil {
+		log.Fatal(err) // handle the error here
+	}
+}
+
+func ExampleWithForceDelete() {
+	// Delete a bucket even when it is not empty. If the bucket has soft delete
+	// enabled, it is moved to a recoverable soft-deleted state instead.
+	_, err := client.DeleteBucket(ctx, &s3.DeleteBucketInput{
+		Bucket: aws.String("my-bucket"),
+	}, tigrisheaders.WithForceDelete())
+	if err != nil {
+		log.Fatal(err) // handle the error here
+	}
+}
+
 func ExampleWithHeader() {
 	// Set arbitrary HTTP header on request
 	_, err := client.PutObject(ctx, &s3.PutObjectInput{},

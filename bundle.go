@@ -1,19 +1,11 @@
 package storage
 
 import (
-	"bytes"
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
-	"net"
 	"net/http"
-	"strings"
-	"time"
-
-	v4 "github.com/aws/aws-sdk-go-v2/aws/signer/v4"
 )
 
 const (
@@ -32,17 +24,6 @@ const (
 	// BundleOnErrorFail returns an error if any object is missing.
 	BundleOnErrorFail = "fail"
 )
-
-// bundleHTTPClient is reused across calls. No overall timeout — the caller's
-// context controls cancellation, which avoids cutting off streaming reads.
-var bundleHTTPClient = &http.Client{
-	Transport: &http.Transport{
-		Proxy:                 http.ProxyFromEnvironment,
-		DialContext:           (&net.Dialer{Timeout: 30 * time.Second}).DialContext,
-		TLSHandshakeTimeout:   10 * time.Second,
-		ResponseHeaderTimeout: 60 * time.Second,
-	},
-}
 
 // BundleObjectsInput is the input for a BundleObjects request.
 type BundleObjectsInput struct {
@@ -102,8 +83,8 @@ type bundleRequestBody struct {
 //
 // The caller is responsible for closing the returned Body.
 func (c *Client) BundleObjects(ctx context.Context, in *BundleObjectsInput) (*BundleObjectsOutput, error) {
-	if in.Bucket == "" {
-		return nil, fmt.Errorf("storage: BundleObjects: bucket is required")
+	if in == nil || in.Bucket == "" {
+		return nil, fmt.Errorf("storage: BundleObjects: %w", ErrMissingBucket)
 	}
 	if len(in.Keys) == 0 {
 		return nil, fmt.Errorf("storage: BundleObjects: at least one key is required")
@@ -119,62 +100,26 @@ func (c *Client) BundleObjects(ctx context.Context, in *BundleObjectsInput) (*Bu
 		onError = BundleOnErrorSkip
 	}
 
-	opts := c.Client.Options()
-
-	endpoint := GlobalEndpoint
-	if opts.BaseEndpoint != nil {
-		endpoint = *opts.BaseEndpoint
-	}
-	endpoint = strings.TrimRight(endpoint, "/")
-
-	reqURL := fmt.Sprintf("%s/%s?bundle", endpoint, in.Bucket)
+	reqURL := fmt.Sprintf("%s/%s?bundle", c.baseEndpoint(), in.Bucket)
 
 	body, err := json.Marshal(bundleRequestBody{Keys: in.Keys})
 	if err != nil {
 		return nil, fmt.Errorf("storage: BundleObjects: failed to marshal keys: %w", err)
 	}
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, reqURL, bytes.NewReader(body))
-	if err != nil {
-		return nil, fmt.Errorf("storage: BundleObjects: failed to create request: %w", err)
-	}
-
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("X-Tigris-Bundle-Format", BundleFormatTar)
-	req.Header.Set("X-Tigris-Bundle-Compression", compression)
-	req.Header.Set("X-Tigris-Bundle-On-Error", onError)
-
-	// Sign request with SigV4.
-	if opts.Credentials != nil {
-		creds, err := opts.Credentials.Retrieve(ctx)
-		if err != nil {
-			return nil, fmt.Errorf("storage: BundleObjects: failed to retrieve credentials: %w", err)
-		}
-
-		payloadHash := sha256Hex(body)
-		req.Header.Set("X-Amz-Content-Sha256", payloadHash)
-
-		signer := v4.NewSigner()
-		region := opts.Region
-		if region == "" {
-			region = "auto"
-		}
-
-		err = signer.SignHTTP(ctx, creds, req, payloadHash, "s3", region, time.Now())
-		if err != nil {
-			return nil, fmt.Errorf("storage: BundleObjects: failed to sign request: %w", err)
-		}
-	}
-
-	resp, err := bundleHTTPClient.Do(req)
+	resp, err := c.doSignedRequest(ctx, http.MethodPost, reqURL, map[string]string{
+		"Content-Type":                "application/json",
+		"X-Tigris-Bundle-Format":      BundleFormatTar,
+		"X-Tigris-Bundle-Compression": compression,
+		"X-Tigris-Bundle-On-Error":    onError,
+	}, body)
 	if err != nil {
 		return nil, fmt.Errorf("storage: BundleObjects: request failed: %w", err)
 	}
 
 	if resp.StatusCode >= 400 {
 		defer resp.Body.Close()
-		errBody, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
-		return nil, fmt.Errorf("storage: BundleObjects: HTTP %d: %s", resp.StatusCode, string(errBody))
+		return nil, httpError(resp, "BundleObjects")
 	}
 
 	return &BundleObjectsOutput{
@@ -182,9 +127,4 @@ func (c *Client) BundleObjects(ctx context.Context, in *BundleObjectsInput) (*Bu
 		ContentType: resp.Header.Get("Content-Type"),
 		StatusCode:  resp.StatusCode,
 	}, nil
-}
-
-func sha256Hex(data []byte) string {
-	h := sha256.Sum256(data)
-	return hex.EncodeToString(h[:])
 }

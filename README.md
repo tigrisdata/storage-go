@@ -6,7 +6,7 @@ Welcome to the Tigris Storage SDK for Go! This package contains high-level wrapp
 
 [Tigris](https://www.tigrisdata.com/) is a cloud storage service that provides a simple, scalable, and secure object storage solution. It is based on the S3 API, but has additional features that need these helpers.
 
-This SDK provides the main **`storage`** package containing the Tigris client with S3-compatible methods plus Tigris-specific features like bucket forking, snapshots, and object renaming.
+This SDK provides the main **`storage`** package containing the Tigris client with S3-compatible methods plus Tigris-specific features like bucket forking, snapshots, soft delete, and object renaming.
 
 ## Installation
 
@@ -112,6 +112,131 @@ info, err := client.HeadBucketForkOrSnapshot(ctx, &s3.HeadBucketInput{
 // info.IsForkParent         - true if there are forks of this bucket
 ```
 
+### Soft Delete
+
+Soft delete moves a deleted object or bucket into a recoverable state for a retention window. The window is 7 days by default. A custom window must be between 7 and 90 days. Soft delete is a bucket-level setting, so it covers the bucket and every object in it.
+
+#### Create a Bucket With Soft Delete
+
+```go
+// Default 7-day retention window
+_, err := client.CreateBucketWithSoftDelete(ctx, &storage.CreateBucketWithSoftDeleteInput{
+    CreateBucketInput: &s3.CreateBucketInput{
+        Bucket: aws.String("my-bucket"),
+    },
+})
+
+// Custom 30-day retention window
+_, err = client.CreateBucketWithSoftDelete(ctx, &storage.CreateBucketWithSoftDeleteInput{
+    CreateBucketInput: &s3.CreateBucketInput{
+        Bucket: aws.String("my-other-bucket"),
+    },
+    RetentionDays: 30,
+})
+```
+
+#### Enable or Disable Soft Delete on an Existing Bucket
+
+```go
+_, err := client.SetBucketSoftDelete(ctx, &storage.SetBucketSoftDeleteInput{
+    Bucket:        "my-bucket",
+    Enabled:       true,
+    RetentionDays: 30, // omit for the default 7-day window
+})
+```
+
+#### List and Restore Soft-Deleted Objects
+
+```go
+listed, err := client.ListSoftDeletedObjects(ctx, &storage.ListSoftDeletedObjectsInput{
+    Bucket: "my-bucket",
+    Prefix: "logs/", // optional
+})
+// listed.Objects[i].Key          - object key
+// listed.Objects[i].VersionID    - version to restore or permanently delete
+// listed.Objects[i].Size         - original size in bytes
+// listed.Objects[i].LastModified - time the object was soft-deleted
+// listed.IsTruncated             - true if more pages are available
+
+// Restore the most recent soft-deleted version
+_, err = client.RestoreSoftDeletedObject(ctx, &storage.RestoreSoftDeletedObjectInput{
+    Bucket: "my-bucket",
+    Key:    "my-key",
+})
+
+// Restore one specific version
+_, err = client.RestoreSoftDeletedObject(ctx, &storage.RestoreSoftDeletedObjectInput{
+    Bucket:    "my-bucket",
+    Key:       "my-key",
+    VersionID: listed.Objects[0].VersionID,
+})
+```
+
+To read the next page, pass `listed.NextKeyMarker` and `listed.NextVersionIDMarker` back as `KeyMarker` and `VersionIDMarker`.
+
+#### List and Restore Soft-Deleted Buckets
+
+A soft-deleted bucket keeps its name reserved until the retention window expires.
+`RetentionDays` is the window the bucket was configured with. It is not a
+countdown: a bucket deleted 6 days ago with a 30-day window still reports 30.
+
+```go
+listed, err := client.ListSoftDeletedBuckets(ctx, nil)
+// listed.Buckets[i].Name          - bucket to restore
+// listed.Buckets[i].RetentionDays - the configured window in days
+
+_, err = client.RestoreBucket(ctx, &storage.RestoreBucketInput{
+    Bucket: "my-bucket",
+})
+```
+
+#### Delete a Bucket That Is Not Empty
+
+`ForceDeleteBucket` deletes a bucket and its contents in one call. If soft delete is enabled on the bucket, `RestoreBucket` can recover it.
+
+> [!CAUTION]
+> Do not call `ForceDeleteBucket` on a bucket without soft delete. The bucket and every object in it are removed permanently. Support cannot recover them.
+
+```go
+_, err := client.ForceDeleteBucket(ctx, &s3.DeleteBucketInput{
+    Bucket: aws.String("my-bucket"),
+})
+```
+
+#### Purge a Soft-Deleted Version
+
+`PermanentlyDeleteObject` removes one soft-deleted version before its retention window expires. The version ID is required. Get it from `ListSoftDeletedObjects`.
+
+> [!CAUTION]
+> Do not call `PermanentlyDeleteObject` unless you accept the loss of the data. The version is removed permanently. Support cannot recover it.
+
+```go
+_, err := client.PermanentlyDeleteObject(ctx, "my-bucket", "my-key", "1775929768707198086")
+```
+
+#### Error Handling
+
+`ListSoftDeletedObjects`, `ListSoftDeletedBuckets`, `RestoreSoftDeletedObject`, `RestoreBucket`, and `SetBucketSoftDelete` send their requests to Tigris endpoints that the S3 SDK cannot express. When Tigris rejects one of these requests, the method returns a `*storage.APIError`. This type implements `smithy.APIError`, so `errors.As` reads it the same way it reads an error from the embedded S3 client:
+
+```go
+_, err := client.RestoreBucket(ctx, &storage.RestoreBucketInput{Bucket: "my-bucket"})
+
+var apiErr smithy.APIError
+if errors.As(err, &apiErr) && apiErr.ErrorCode() == "NoSuchBucket" {
+    // the bucket is gone
+}
+```
+
+For the HTTP status code and the request ID, match the concrete type:
+
+```go
+var apiErr *storage.APIError
+if errors.As(err, &apiErr) {
+    log.Printf("HTTP %d %s: %s (request %s)",
+        apiErr.StatusCode, apiErr.Code, apiErr.Message, apiErr.RequestID)
+}
+```
+
 ## Object Features
 
 ### Rename Objects
@@ -131,6 +256,7 @@ _, err := client.RenameObject(ctx, &s3.CopyObjectInput{
 For more information on Tigris features, see:
 
 - [Snapshots and Forks](https://www.tigrisdata.com/docs/buckets/snapshots-and-forks/)
+- [Soft Delete](https://www.tigrisdata.com/docs/buckets/soft-delete/)
 - [Object Rename](https://www.tigrisdata.com/docs/objects/object-rename/)
 - [Query Metadata](https://www.tigrisdata.com/docs/objects/query-metadata/)
 - [Conditional Operations](https://www.tigrisdata.com/docs/objects/conditionals/)

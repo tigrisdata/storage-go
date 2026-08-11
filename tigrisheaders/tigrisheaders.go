@@ -6,6 +6,7 @@ package tigrisheaders
 import (
 	"fmt"
 	"net/url"
+	"strconv"
 	"strings"
 	"time"
 
@@ -119,6 +120,37 @@ func WithCompareAndSwap() func(*s3.Options) {
 // [1]: https://www.tigrisdata.com/docs/buckets/snapshots-and-forks/#enabling-snapshots-and-forks
 func WithEnableSnapshot() func(*s3.Options) {
 	return WithHeader("X-Tigris-Enable-Snapshot", "true")
+}
+
+// WithSoftDelete enables soft delete when creating a bucket. Once enabled,
+// deleting an object or the bucket moves it into a recoverable soft-deleted
+// state for a retention window instead of removing it immediately.
+//
+// Call with no arguments for the default 7-day retention window. Pass a single
+// integer between 7 and 90 to set a custom window in days; only the first value
+// is used. Values outside the 7-90 range are rejected by the server.
+//
+// See Tigris documentation[1] for more information.
+//
+// [1]: https://www.tigrisdata.com/docs/buckets/soft-delete/
+func WithSoftDelete(days ...int) func(*s3.Options) {
+	if len(days) > 0 {
+		return WithHeader("X-Tigris-Soft-Delete", strconv.Itoa(days[0]))
+	}
+	return WithHeader("X-Tigris-Soft-Delete", "true")
+}
+
+// WithForceDelete forces deletion of a bucket even when it is not empty.
+//
+// If the bucket has soft delete enabled, it is moved to a recoverable
+// soft-deleted state for the retention window instead of being permanently
+// removed. Otherwise the bucket and its contents are permanently deleted.
+//
+// See Tigris documentation[1] for more information.
+//
+// [1]: https://www.tigrisdata.com/docs/buckets/soft-delete/
+func WithForceDelete() func(*s3.Options) {
+	return WithHeader("X-Tigris-Force-Delete", "true")
 }
 
 // WithStorageClass sets the storage class tier for buckets or objects.
