@@ -119,8 +119,7 @@ func (c *Client) BundleObjects(ctx context.Context, in *BundleObjectsInput) (*Bu
 
 	if resp.StatusCode >= 400 {
 		defer resp.Body.Close()
-		errBody, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
-		return nil, fmt.Errorf("storage: BundleObjects: HTTP %d: %s", resp.StatusCode, string(errBody))
+		return nil, httpError(resp, "BundleObjects")
 	}
 
 	return &BundleObjectsOutput{

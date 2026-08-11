@@ -214,6 +214,29 @@ _, err := client.ForceDeleteBucket(ctx, &s3.DeleteBucketInput{
 _, err := client.PermanentlyDeleteObject(ctx, "my-bucket", "my-key", "1775929768707198086")
 ```
 
+#### Error Handling
+
+`ListSoftDeletedObjects`, `ListSoftDeletedBuckets`, `RestoreSoftDeletedObject`, `RestoreBucket`, and `SetBucketSoftDelete` send their requests to Tigris endpoints that the S3 SDK cannot express. When Tigris rejects one of these requests, the method returns a `*storage.APIError`. This type implements `smithy.APIError`, so `errors.As` reads it the same way it reads an error from the embedded S3 client:
+
+```go
+_, err := client.RestoreBucket(ctx, &storage.RestoreBucketInput{Bucket: "my-bucket"})
+
+var apiErr smithy.APIError
+if errors.As(err, &apiErr) && apiErr.ErrorCode() == "NoSuchBucket" {
+    // the bucket is gone
+}
+```
+
+For the HTTP status code and the request ID, match the concrete type:
+
+```go
+var apiErr *storage.APIError
+if errors.As(err, &apiErr) {
+    log.Printf("HTTP %d %s: %s (request %s)",
+        apiErr.StatusCode, apiErr.Code, apiErr.Message, apiErr.RequestID)
+}
+```
+
 ## Object Features
 
 ### Rename Objects
