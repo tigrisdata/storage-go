@@ -538,14 +538,23 @@ func (c *Client) PresignURL(ctx context.Context, method string, key string, expi
 
 	switch method {
 	case http.MethodGet:
-		return presignURLGet(ctx, presignClient, o.BucketName, key, expiry)
+		return presignURLGet(ctx, presignClient, o.BucketName, key, expiry, o)
 	case http.MethodPut:
 		return presignURLPut(ctx, presignClient, o.BucketName, key, expiry, o)
 	case http.MethodDelete:
-		return presignURLDelete(ctx, presignClient, o.BucketName, key, expiry)
+		return presignURLDelete(ctx, presignClient, o.BucketName, key, expiry, o)
 	}
 
 	return "", nil // unreachable
+}
+
+func presignOptions(expiry time.Duration, opts ClientOptions) []func(*s3.PresignOptions) {
+	return []func(*s3.PresignOptions){
+		s3.WithPresignExpires(expiry),
+		func(po *s3.PresignOptions) {
+			po.ClientOptions = append(po.ClientOptions, opts.S3Options...)
+		},
+	}
 }
 
 // generateRandomSuffix generates a random hexadecimal string of the specified length.
@@ -636,11 +645,11 @@ func raise[T comparable](v T) *T {
 }
 
 // presignURLGet generates a presigned URL for GET operations.
-func presignURLGet(ctx context.Context, client *s3.PresignClient, bucket, key string, expiry time.Duration) (string, error) {
+func presignURLGet(ctx context.Context, client *s3.PresignClient, bucket, key string, expiry time.Duration, opts ClientOptions) (string, error) {
 	presignResult, err := client.PresignGetObject(ctx, &s3.GetObjectInput{
 		Bucket: aws.String(bucket),
 		Key:    aws.String(key),
-	}, s3.WithPresignExpires(expiry))
+	}, presignOptions(expiry, opts)...)
 	if err != nil {
 		return "", fmt.Errorf("presign get: %w", err)
 	}
@@ -662,7 +671,7 @@ func presignURLPut(ctx context.Context, client *s3.PresignClient, bucket, key st
 		input.ContentDisposition = opts.ContentDisposition
 	}
 
-	presignResult, err := client.PresignPutObject(ctx, input, s3.WithPresignExpires(expiry))
+	presignResult, err := client.PresignPutObject(ctx, input, presignOptions(expiry, opts)...)
 	if err != nil {
 		return "", fmt.Errorf("presign put: %w", err)
 	}
@@ -671,11 +680,11 @@ func presignURLPut(ctx context.Context, client *s3.PresignClient, bucket, key st
 }
 
 // presignURLDelete generates a presigned URL for DELETE operations.
-func presignURLDelete(ctx context.Context, client *s3.PresignClient, bucket, key string, expiry time.Duration) (string, error) {
+func presignURLDelete(ctx context.Context, client *s3.PresignClient, bucket, key string, expiry time.Duration, opts ClientOptions) (string, error) {
 	presignResult, err := client.PresignDeleteObject(ctx, &s3.DeleteObjectInput{
 		Bucket: aws.String(bucket),
 		Key:    aws.String(key),
-	}, s3.WithPresignExpires(expiry))
+	}, presignOptions(expiry, opts)...)
 	if err != nil {
 		return "", fmt.Errorf("presign delete: %w", err)
 	}
