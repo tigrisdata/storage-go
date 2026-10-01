@@ -75,7 +75,7 @@ func TestCreateBucket(t *testing.T) {
 			if cleanup == nil {
 				cleanup = func() func() { return func() {} }
 			}
-			defer cleanup()
+			defer cleanup()()
 
 			client, err := New(context.Background(),
 				WithEndpoint("https://test.endpoint.dev"),
@@ -128,7 +128,7 @@ func TestDeleteBucket(t *testing.T) {
 			if cleanup == nil {
 				cleanup = func() func() { return func() {} }
 			}
-			defer cleanup()
+			defer cleanup()()
 
 			client, err := New(context.Background(),
 				WithEndpoint("https://test.endpoint.dev"),
@@ -176,7 +176,7 @@ func TestListBuckets(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			cleanup := tt.setupEnv
-			defer cleanup()
+			defer cleanup()()
 
 			client, err := New(context.Background(),
 				WithEndpoint("https://test.endpoint.dev"),
@@ -219,7 +219,7 @@ func TestGetBucketInfo(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			cleanup := tt.setupEnv
-			defer cleanup()
+			defer cleanup()()
 
 			// Create a client
 			os.Setenv("TIGRIS_STORAGE_BUCKET", "dummy-bucket")
